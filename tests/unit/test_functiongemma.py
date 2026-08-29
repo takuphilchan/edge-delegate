@@ -10,6 +10,7 @@ from edge_delegate.planner import (
     PlannerContext,
     PlannerError,
     ScriptedFunctionGemmaBackend,
+    TransformersFunctionGemmaBackend,
     extract_plan_json,
 )
 from edge_delegate.planner.prompts import FUNCTIONGEMMA_DEVELOPER_MESSAGE
@@ -71,3 +72,86 @@ def test_planner_retrieves_cards_and_records_exact_tool_prompt(
         "sensor.temperature.read",
     }
     assert call["tools"][0]["function"]["name"] == "submit_plan"
+
+
+def test_transformers_backend_uses_official_deterministic_generation_settings() -> None:
+    class FakeTokens:
+        def __init__(self, length: int) -> None:
+            self.shape = (length,)
+
+        def __getitem__(self, item):
+            assert isinstance(item, slice)
+            return FakeTokens(self.shape[-1] - int(item.start))
+
+    class FakeBatch(dict):
+        def to(self, device):
+            assert device == "cpu"
+            return self
+
+    class FakeProcessor:
+        eos_token_id = 7
+
+        def __init__(self) -> None:
+            self.template_call = None
+            self.decode_call = None
+
+        def apply_chat_template(self, messages, **kwargs):
+            self.template_call = {"messages": messages, **kwargs}
+            return FakeBatch(input_ids=FakeTokens(3))
+
+        def decode(self, tokens, **kwargs):
+            self.decode_call = {"tokens": tokens, **kwargs}
+            return "model-output"
+
+    class FakeModel:
+        device = "cpu"
+
+        def __init__(self) -> None:
+            self.generate_call = None
+
+        def generate(self, **kwargs):
+            self.generate_call = kwargs
+            return [FakeTokens(5)]
+
+    class FakeMemory:
+        rss = 123
+
+    class FakeProcess:
+        def memory_info(self):
+            return FakeMemory()
+
+    class FakePsutil:
+        @staticmethod
+        def Process():
+            return FakeProcess()
+
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+    class FakeTorch:
+        cuda = FakeCuda()
+
+    processor = FakeProcessor()
+    model = FakeModel()
+    backend = object.__new__(TransformersFunctionGemmaBackend)
+    backend._processor = processor
+    backend._model = model
+    backend._torch = FakeTorch()
+    backend._psutil = FakePsutil()
+    backend._last_generation = None
+
+    output = backend.generate(
+        [{"role": "user", "content": "test"}],
+        [{"type": "function"}],
+        max_new_tokens=12,
+    )
+
+    assert output == "model-output"
+    assert model.generate_call["do_sample"] is False
+    assert model.generate_call["pad_token_id"] == 7
+    assert model.generate_call["max_new_tokens"] == 12
+    assert processor.decode_call["skip_special_tokens"] is True
+    assert backend.last_generation.prompt_tokens == 3
+    assert backend.last_generation.generated_tokens == 2

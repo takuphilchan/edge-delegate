@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Protocol, runtime_checkable
 
-from edge_delegate.contracts import PlanningRequest
+from edge_delegate.contracts import CapabilityCard, PlanningRequest
 from edge_delegate.ir import canonicalize_plan, parse_plan
 from edge_delegate.retrieval import CapabilityIndex
 
@@ -20,6 +21,52 @@ _FUNCTION_CALL = re.compile(
     r"(?P<plan>.*?)<escape>\}\s*<end_function_call>\s*\Z",
     flags=re.DOTALL,
 )
+
+
+class FunctionCallFormatError(PlannerError):
+    """Raised when the model does not emit the required submit_plan call."""
+
+
+class FunctionPlanError(PlannerError):
+    """Raised when submit_plan contains malformed or invalid Plan IR."""
+
+
+@dataclass(frozen=True, slots=True)
+class ModelDiagnostics:
+    model_id: str
+    adapter_path: str | None
+    revision: str | None
+    device: str
+    device_name: str | None
+    dtype: str
+    parameter_count: int
+    model_footprint_bytes: int | None
+    load_time_ms: float
+    cpu_rss_before_bytes: int
+    cpu_rss_after_bytes: int
+    peak_gpu_memory_bytes: int | None
+    torch_version: str
+    transformers_version: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationDiagnostics:
+    raw_output: str
+    prompt_tokens: int
+    generated_tokens: int
+    latency_ms: float
+    cpu_rss_before_bytes: int
+    cpu_rss_after_bytes: int
+    peak_gpu_memory_bytes: int | None
+
+    def to_dict(self, *, include_raw_output: bool = True) -> dict[str, object]:
+        result = asdict(self)
+        if not include_raw_output:
+            result.pop("raw_output")
+        return result
 
 
 @runtime_checkable
@@ -40,16 +87,30 @@ class TransformersFunctionGemmaBackend:
         self,
         model_id: str = DEFAULT_MODEL_ID,
         *,
+        adapter_path: str | None = None,
         device_map: str = "auto",
         dtype: str = "auto",
     ) -> None:
         try:
+            import psutil
+            import torch
+            import transformers
             from transformers import AutoModelForCausalLM, AutoProcessor
         except ImportError as exc:
             raise PlannerError(
                 "FunctionGemma inference requires the planner extra: "
                 "python -m pip install -e '.[planner]'"
             ) from exc
+        self._torch = torch
+        self._psutil = psutil
+        self._last_generation: GenerationDiagnostics | None = None
+        process = psutil.Process()
+        cpu_before = process.memory_info().rss
+        gpu_available = torch.cuda.is_available()
+        if gpu_available:
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+        load_started = time.perf_counter()
         try:
             self._processor = AutoProcessor.from_pretrained(model_id)
             self._model = AutoModelForCausalLM.from_pretrained(
@@ -57,10 +118,52 @@ class TransformersFunctionGemmaBackend:
                 device_map=device_map,
                 dtype=dtype,
             )
+            if adapter_path is not None:
+                from peft import PeftModel
+
+                self._model = PeftModel.from_pretrained(self._model, adapter_path)
         except Exception as exc:
             raise PlannerError(
-                f"could not load {model_id!r}; confirm Hugging Face access and license acceptance"
+                f"could not load {model_id!r} with adapter {adapter_path!r}; confirm "
+                "Hugging Face access, license acceptance, and adapter compatibility"
             ) from exc
+        if gpu_available:
+            torch.cuda.synchronize()
+        load_time_ms = (time.perf_counter() - load_started) * 1000
+        cpu_after = process.memory_info().rss
+        parameter = next(iter(self._model.parameters()), None)
+        model_dtype = "unknown" if parameter is None else str(parameter.dtype)
+        footprint_getter = getattr(self._model, "get_memory_footprint", None)
+        footprint = None if footprint_getter is None else int(footprint_getter())
+        config = getattr(self._model, "config", None)
+        revision = None if config is None else getattr(config, "_commit_hash", None)
+        model_device = str(getattr(self._model, "device", "unknown"))
+        self._model_info = ModelDiagnostics(
+            model_id=model_id,
+            adapter_path=adapter_path,
+            revision=revision,
+            device=model_device,
+            device_name=torch.cuda.get_device_name(0) if gpu_available else None,
+            dtype=model_dtype,
+            parameter_count=sum(parameter.numel() for parameter in self._model.parameters()),
+            model_footprint_bytes=footprint,
+            load_time_ms=load_time_ms,
+            cpu_rss_before_bytes=cpu_before,
+            cpu_rss_after_bytes=cpu_after,
+            peak_gpu_memory_bytes=(
+                int(torch.cuda.max_memory_allocated()) if gpu_available else None
+            ),
+            torch_version=torch.__version__,
+            transformers_version=transformers.__version__,
+        )
+
+    @property
+    def model_info(self) -> ModelDiagnostics:
+        return self._model_info
+
+    @property
+    def last_generation(self) -> GenerationDiagnostics | None:
+        return self._last_generation
 
     def generate(
         self,
@@ -69,6 +172,7 @@ class TransformersFunctionGemmaBackend:
         *,
         max_new_tokens: int,
     ) -> str:
+        self._last_generation = None
         encoded = self._processor.apply_chat_template(
             list(messages),
             tools=list(tools),
@@ -79,16 +183,39 @@ class TransformersFunctionGemmaBackend:
         model_device = getattr(self._model, "device", None)
         if model_device is not None:
             encoded = encoded.to(model_device)
+        process = self._psutil.Process()
+        cpu_before = process.memory_info().rss
+        gpu_available = self._torch.cuda.is_available()
+        if gpu_available:
+            self._torch.cuda.reset_peak_memory_stats()
+        generation_started = time.perf_counter()
         generated = self._model.generate(
             **encoded,
             max_new_tokens=max_new_tokens,
             do_sample=False,
+            pad_token_id=self._processor.eos_token_id,
         )
+        if gpu_available:
+            self._torch.cuda.synchronize()
+        latency_ms = (time.perf_counter() - generation_started) * 1000
         prompt_length = encoded["input_ids"].shape[-1]
-        return self._processor.decode(
-            generated[0][prompt_length:],
-            skip_special_tokens=False,
+        generated_tokens = generated[0][prompt_length:]
+        raw_output = self._processor.decode(
+            generated_tokens,
+            skip_special_tokens=True,
         )
+        self._last_generation = GenerationDiagnostics(
+            raw_output=raw_output,
+            prompt_tokens=int(prompt_length),
+            generated_tokens=int(generated_tokens.shape[-1]),
+            latency_ms=latency_ms,
+            cpu_rss_before_bytes=cpu_before,
+            cpu_rss_after_bytes=process.memory_info().rss,
+            peak_gpu_memory_bytes=(
+                int(self._torch.cuda.max_memory_allocated()) if gpu_available else None
+            ),
+        )
+        return raw_output
 
 
 def extract_plan_json(output: str) -> str:
@@ -99,12 +226,12 @@ def extract_plan_json(output: str) -> str:
     stripped = output.strip()
     match = _FUNCTION_CALL.fullmatch(stripped)
     if match is None:
-        raise PlannerError("model did not call submit_plan in the required format")
+        raise FunctionCallFormatError("model did not call submit_plan in the required format")
     candidate = match.group("plan")
     try:
         plan = parse_plan(candidate)
     except Exception as exc:
-        raise PlannerError(f"model returned invalid Plan IR: {exc}") from exc
+        raise FunctionPlanError(f"model returned invalid Plan IR: {exc}") from exc
     return canonicalize_plan(plan)
 
 
@@ -114,6 +241,25 @@ class ScriptedFunctionGemmaBackend:
 
     outputs: list[str]
     calls: list[dict[str, object]] = field(default_factory=list)
+    model_info: ModelDiagnostics = field(
+        default_factory=lambda: ModelDiagnostics(
+            model_id="scripted",
+            adapter_path=None,
+            revision=None,
+            device="cpu",
+            device_name=None,
+            dtype="none",
+            parameter_count=0,
+            model_footprint_bytes=0,
+            load_time_ms=0.0,
+            cpu_rss_before_bytes=0,
+            cpu_rss_after_bytes=0,
+            peak_gpu_memory_bytes=None,
+            torch_version="not-loaded",
+            transformers_version="not-loaded",
+        )
+    )
+    last_generation: GenerationDiagnostics | None = None
 
     def generate(
         self,
@@ -122,6 +268,7 @@ class ScriptedFunctionGemmaBackend:
         *,
         max_new_tokens: int,
     ) -> str:
+        self.last_generation = None
         self.calls.append(
             {
                 "messages": list(messages),
@@ -131,7 +278,43 @@ class ScriptedFunctionGemmaBackend:
         )
         if not self.outputs:
             raise PlannerError("scripted backend has no output remaining")
-        return self.outputs.pop(0)
+        output = self.outputs.pop(0)
+        self.last_generation = GenerationDiagnostics(
+            raw_output=output,
+            prompt_tokens=0,
+            generated_tokens=0,
+            latency_ms=0.0,
+            cpu_rss_before_bytes=0,
+            cpu_rss_after_bytes=0,
+            peak_gpu_memory_bytes=None,
+        )
+        return output
+
+
+def select_capabilities(
+    request: PlanningRequest,
+    context: PlannerContext,
+    *,
+    limit: int,
+) -> tuple[CapabilityCard, ...]:
+    """Apply the planner's deterministic retrieval and policy filtering."""
+
+    allowed = (
+        None
+        if context.policy.allowed_capabilities is None
+        else context.policy.allowed_capabilities - context.policy.denied_capabilities
+    )
+    retrieved = CapabilityIndex(context.capabilities).search(
+        request.text,
+        limit=limit,
+        allowed_ids=allowed,
+    )
+    selected = tuple(item.card for item in retrieved)
+    if selected:
+        return selected
+    return tuple(
+        card for card in context.capabilities if allowed is None or card.capability_id in allowed
+    )[:limit]
 
 
 @dataclass(slots=True)
@@ -141,23 +324,7 @@ class FunctionGemmaPlanner(Planner):
     max_new_tokens: int = 1024
 
     def plan(self, request: PlanningRequest, context: PlannerContext) -> str:
-        allowed = (
-            None
-            if context.policy.allowed_capabilities is None
-            else context.policy.allowed_capabilities - context.policy.denied_capabilities
-        )
-        retrieved = CapabilityIndex(context.capabilities).search(
-            request.text,
-            limit=self.retrieval_limit,
-            allowed_ids=allowed,
-        )
-        selected = tuple(item.card for item in retrieved)
-        if not selected:
-            selected = tuple(
-                card
-                for card in context.capabilities
-                if allowed is None or card.capability_id in allowed
-            )[: self.retrieval_limit]
+        selected = select_capabilities(request, context, limit=self.retrieval_limit)
         messages = build_planner_messages(request, context.state, context.policy, selected)
         output = self.backend.generate(
             messages,

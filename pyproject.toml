@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edge-delegate"
-version = "0.2.0"
+version = "0.3.0"
 description = "Model-independent edge request planner and delegation runtime"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -22,7 +22,18 @@ dev = [
 ]
 planner = [
   "accelerate>=1.14,<2",
+  "psutil>=7.2,<8",
   "transformers>=5.16,<6",
+]
+training = [
+  "accelerate>=1.14,<2",
+  "datasets>=5.0,<6",
+  "peft>=0.20,<0.21",
+  "psutil>=7.2,<8",
+  "pyyaml>=6.0,<7",
+  "tensorboard>=2.21,<3",
+  "transformers>=5.16,<6",
+  "trl>=1.12,<2",
 ]
 
 [tool.setuptools]

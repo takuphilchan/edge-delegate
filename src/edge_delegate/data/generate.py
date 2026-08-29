@@ -373,8 +373,14 @@ def _sft_record(record: dict[str, object]) -> dict[str, object]:
     plan = PlanIR.from_dict(record["expected_plan"])
     messages: list[dict[str, object]] = list(build_planner_messages(request, state, policy, cards))
     messages.append(sft_assistant_message(canonicalize_plan(plan)))
+    metadata = record["metadata"]
+    group_id = "|".join(
+        str(metadata[name]) for name in ("template_id", "paraphrase_cluster", "device_family")
+    )
     return {
         "record_id": record["record_id"],
+        "group_id": group_id,
+        "expected_route": plan.route.value,
         "messages": messages,
         "tools": [SUBMIT_PLAN_TOOL],
     }
@@ -387,8 +393,11 @@ def write_dataset(output_dir: Path, *, seed: int = 17) -> dict[str, object]:
     _write_jsonl(output_dir / "all.jsonl", records)
     for name, members in splits.items():
         _write_jsonl(output_dir / f"{name}.jsonl", members)
-    train_sft = [_sft_record(record) for record in splits["train"]]
-    _write_jsonl(output_dir / "functiongemma-sft-train.jsonl", train_sft)
+    for name, members in splits.items():
+        _write_jsonl(
+            output_dir / f"functiongemma-sft-{name}.jsonl",
+            [_sft_record(record) for record in members],
+        )
     manifest: dict[str, object] = {
         "schema_version": "edge-delegate-manifest.v0",
         "dataset_version": DATASET_VERSION,
@@ -405,6 +414,11 @@ def write_dataset(output_dir: Path, *, seed: int = 17) -> dict[str, object]:
         "split_counts": {name: len(members) for name, members in splits.items()},
         "dataset_sha256": dataset_fingerprint(records),
         "split_sha256": {name: dataset_fingerprint(members) for name, members in splits.items()},
+        "sft_format": {
+            "model_family": "functiongemma",
+            "prompt_version": "functiongemma-plan-v0",
+            "loss_target": "assistant_tool_call_only",
+        },
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n",

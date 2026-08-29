@@ -6,7 +6,7 @@ The small model is not the security boundary and is not intended to be a general
 
 ## Current status
 
-Version `0.2.0` implements the deterministic vertical slice and the first measurable planner baseline:
+Version `0.3.0` implements the deterministic vertical slice, measured real-model baseline, and guarded LoRA training loop:
 
 - Strict versioned Python contracts and matching JSON Schemas
 - Bounded Plan-IR JSON parsing with duplicate-key and non-finite-number rejection
@@ -23,11 +23,15 @@ Version `0.2.0` implements the deterministic vertical slice and the first measur
 - Simulator-authored scenarios spanning local, hybrid, external, clarify, defer, and deny routes
 - Leakage-resistant group splits, isolated safety cases, fingerprints, and manifests
 - FunctionGemma-compatible SFT JSONL export without model-generated gold labels
+- Strict training preflight for Plan-IR labels, scenario leakage, and token truncation
+- BF16 all-linear LoRA training with assistant tool-call-only loss and best-checkpoint selection
+- Reproducible training metadata with package, model, dataset, hardware, memory, and timing details
+- Adapter-aware inference and a non-executing six-route model doctor
 - Parsing, static validity, execution, routing, exact-plan, calibration, and abstention metrics
 - CLI demo, validation, dataset generation, and gold/model evaluation commands
 - Unit, property, integration, regression, safety, hardware, and CI checks
 
-Fine-tuning, external LLM handoff, embedded export, and hardware model benchmarks remain later milestones. The repository intentionally measures the prompt-only model before training it.
+External LLM handoff, embedded export, and representative hardware model benchmarks remain later milestones. The current fine-tune proves the training contract, but the 36-record pilot corpus is intentionally too small and imbalanced for deployment.
 
 ## Environment setup
 
@@ -46,6 +50,12 @@ python -m pip install -e ".[planner]"
 ```
 
 `google/functiongemma-270m-it` is gated on Hugging Face. Accept its license and authenticate before a real-model run; ordinary tests use a scripted backend and do not download model weights.
+
+Install the separate training stack only on a development machine:
+
+```bash
+python -m pip install -e ".[training]"
+```
 
 ## Run the vertical slice
 
@@ -85,17 +95,42 @@ edge-delegate evaluate \
   --output artifacts/evaluation/gold-self-check.json
 ```
 
-Then measure the unmodified FunctionGemma baseline after installing the planner extra and authenticating with Hugging Face:
+Then diagnose the unmodified FunctionGemma baseline after installing the planner extra and authenticating with Hugging Face:
 
 ```bash
-edge-delegate evaluate \
-  --dataset data/processed/pilot/test.jsonl \
-  --planner functiongemma \
+edge-delegate model-doctor \
   --model-id google/functiongemma-270m-it \
-  --output artifacts/evaluation/functiongemma-prompt-baseline.json
+  --output artifacts/model-doctor/functiongemma-prompt-baseline.json
 ```
 
-The gold run is a harness self-check, not a model-quality score. Fine-tuning should begin only after the FunctionGemma test and safety reports expose repeatable, trainable failure classes.
+Preflight the exact tokenizer rendering and split isolation before training:
+
+```bash
+edge-delegate train --config configs/training/pilot.yaml --preflight-only
+```
+
+The two-step smoke configuration checks the complete training and adapter-loading path. The pilot configuration runs the first small experiment:
+
+```bash
+edge-delegate train --config configs/training/smoke.yaml
+edge-delegate train --config configs/training/pilot.yaml
+edge-delegate model-doctor \
+  --model-id google/functiongemma-270m-it \
+  --adapter artifacts/training/functiongemma-pilot-v0/final-adapter \
+  --output artifacts/model-doctor/functiongemma-pilot-v0.json
+```
+
+On the RTX 5060 Laptop GPU, the measured prompt-only model and first pilot adapter produced:
+
+| Six-route integration smoke | Prompt-only | Pilot LoRA |
+| --- | ---: | ---: |
+| Parse-valid plans | 0/6 | 6/6 |
+| Correct request ID | 0/6 | 6/6 |
+| Statically valid plans | 0/6 | 3/6 |
+| Correct route | 0/6 | 3/6 |
+| Exact plan | 0/6 | 1/6 |
+
+The pilot used 3,796,992 trainable adapter parameters, peaked near 4.03 GB allocated GPU memory during training, and selected its best checkpoint at epoch 5. These are engineering measurements from a tiny integration fixture, not general model-quality claims. The gold run likewise remains only a harness self-check.
 
 ## Verify changes
 
@@ -121,11 +156,11 @@ Ordinary tests exclude hardware checks so the deterministic core runs on CI and 
 
 ## Next milestone
 
-The next milestone is a measured real-model baseline followed by evidence-driven training:
+The next milestone is dataset v1, driven by the measured pilot failures:
 
-1. Run the gated FunctionGemma checkpoint on test and isolated safety splits.
-2. Review failures by route, Plan-IR shape, capability retrieval, arguments, and calibration.
-3. Expand scenarios only for demonstrated gaps; add multilingual and device-family holdouts.
-4. Compare Qwen3 0.6B as a stronger baseline or label-review assistant, never as an unchecked gold-label source.
-5. Add a LoRA/QLoRA training pipeline and repeat the same frozen evaluation.
-6. Export and benchmark the chosen checkpoint on declared edge targets.
+1. Add multiple independent scenario groups per route across train, validation, and test.
+2. Balance empty-step abstention routes against direct-action, multi-step, reference, and hybrid plans.
+3. Add safe deny demonstrations while keeping prompt-injection and actuator attacks isolated.
+4. Add policy/state counterfactuals, capability-set variation, multilingual utterances, and device-family holdouts.
+5. Freeze the expanded evaluation sets, retrain, and require gains in static validity, routing, exact plans, and safety—not merely token loss.
+6. Compare a stronger small checkpoint only after the same data and evaluation contract is stable, then export and benchmark the winner on declared edge targets.

@@ -1,4 +1,4 @@
-status: prompt_baseline_ready
+status: pilot_adapter_measured
 model:
   id: google/functiongemma-270m-it
   role: primary_edge_planner_candidate
@@ -11,7 +11,9 @@ planner:
   deterministic_validation_required: true
 adapter:
   method: lora
-  status: not_started_pending_baseline_error_analysis
+  status: pilot_v0_not_deployment_ready
+  target_modules: all-linear
+  rank: 16
 runtime:
   target_precision: int8_or_int4
   max_context_tokens: 2048

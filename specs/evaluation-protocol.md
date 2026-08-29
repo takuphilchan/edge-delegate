@@ -1,6 +1,6 @@
 # Evaluation Protocol
 
-Status: deterministic evaluator and prompt adapter implemented; real-model benchmark pending
+Status: deterministic evaluator, real-model diagnostics, and pilot adapter measurement implemented
 
 ## Evaluation layers
 
@@ -18,4 +18,6 @@ Templates, device families, and paraphrase clusters are assigned together so hel
 
 ## Current automated baseline
 
-The repository runs contract/schema, malformed-output, property, integration, regression, policy-boundary, idempotency, audit-minimization, retrieval, strict adapter, grouped-data, evaluation-harness, and explicit CUDA visibility tests. The gold self-check must score 100% and only proves the harness is internally consistent. Prompt-only FunctionGemma quality, multilingual behavior, model latency, memory, and energy remain pending gated-checkpoint execution.
+The repository runs contract/schema, malformed-output, property, integration, regression, policy-boundary, idempotency, audit-minimization, retrieval, strict adapter, grouped-data, evaluation-harness, and explicit CUDA visibility tests. The gold self-check must score 100% and only proves the harness is internally consistent.
+
+The measured six-route integration smoke on the prompt-only checkpoint produced no parseable plans. The first pilot LoRA produced parseable, request-bound Plan IR for all six cases, but only half were statically valid, half selected the expected route, and one was exact. These six cases validate the model/software boundary; they are not a model-quality benchmark. Multilingual behavior, broader device families, calibrated confidence, energy measurement, and edge deployment benchmarks remain pending.

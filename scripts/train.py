@@ -1,4 +1,8 @@
-"""Training entry-point scaffold; intentionally contains no training logic."""
+"""Compatibility entry point for the guarded adapter trainer."""
 
-# TODO(wiring): load a versioned dataset manifest and explicit training config.
+import sys
 
+from edge_delegate.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main(["train", *sys.argv[1:]]))

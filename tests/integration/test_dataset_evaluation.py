@@ -5,8 +5,9 @@ import json
 from edge_delegate.cli import main
 from edge_delegate.contracts import PlanIR
 from edge_delegate.data import generate_records, split_records, validate_records, write_dataset
-from edge_delegate.evaluation import EvaluationRunner
-from edge_delegate.planner import StaticPlanner
+from edge_delegate.evaluation import EvaluationRunner, select_controlled_records
+from edge_delegate.ir import canonicalize_plan
+from edge_delegate.planner import ScriptedFunctionGemmaBackend, StaticPlanner
 
 
 def test_generated_records_are_executable_and_fingerprinted() -> None:
@@ -66,9 +67,7 @@ def test_evaluator_rejects_a_plan_bound_to_another_request() -> None:
         confidence=expected.confidence,
         clarification=expected.clarification,
     )
-    report = EvaluationRunner(StaticPlanner({str(record["record_id"]): wrong})).evaluate(
-        [record]
-    )
+    report = EvaluationRunner(StaticPlanner({str(record["record_id"]): wrong})).evaluate([record])
     assert report["metrics"]["request_id_accuracy"] == 0.0
     assert report["metrics"]["outcome_accuracy"] == 0.0
 
@@ -81,6 +80,9 @@ def test_data_and_evaluation_cli_write_reproducible_artifacts(tmp_path, capsys) 
     manifest = json.loads(capsys.readouterr().out)
     assert manifest["record_count"] == 36
     assert (dataset_dir / "functiongemma-sft-train.jsonl").is_file()
+    assert (dataset_dir / "functiongemma-sft-validation.jsonl").is_file()
+    assert (dataset_dir / "functiongemma-sft-test.jsonl").is_file()
+    assert (dataset_dir / "functiongemma-sft-safety.jsonl").is_file()
 
     assert (
         main(
@@ -105,3 +107,37 @@ def test_write_dataset_is_seed_reproducible(tmp_path) -> None:
     first = write_dataset(tmp_path / "first", seed=23)
     second = write_dataset(tmp_path / "second", seed=23)
     assert first == second
+
+
+def test_model_doctor_cli_writes_report_without_real_checkpoint(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    records = select_controlled_records(generate_records())[:1]
+    plan = PlanIR.from_dict(records[0]["expected_plan"])
+    output = (
+        "<start_function_call>call:submit_plan{plan_json:<escape>"
+        f"{canonicalize_plan(plan)}"
+        "<escape>}<end_function_call>"
+    )
+    backend = ScriptedFunctionGemmaBackend([output])
+    monkeypatch.setattr(
+        "edge_delegate.cli.TransformersFunctionGemmaBackend",
+        lambda model_id, adapter_path=None: backend,
+    )
+    report_path = tmp_path / "doctor.json"
+
+    result = main(
+        [
+            "model-doctor",
+            "--cases",
+            "1",
+            "--output",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    capsys.readouterr()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["operational"]["all_generations_succeeded"] is True
+    assert report["quality_smoke"]["exact_plan_accuracy"] == 1.0
