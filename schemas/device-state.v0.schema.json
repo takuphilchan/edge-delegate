@@ -2,9 +2,49 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://edge-delegate.local/schemas/device-state.v0.schema.json",
   "title": "Device State v0",
-  "description": "Scaffold for an observable, time-bounded device-state snapshot.",
   "type": "object",
   "additionalProperties": false,
-  "$comment": "Fields and invariants will be wired in the contract phase."
+  "required": ["schema_version", "snapshot_id", "observed_at", "values"],
+  "properties": {
+    "schema_version": { "const": "device-state.v0" },
+    "snapshot_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "values": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "connectivity": {
+      "enum": ["offline", "metered", "online"],
+      "default": "offline"
+    },
+    "battery_percent": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "number", "minimum": 0, "maximum": 100 }
+      ],
+      "default": null
+    },
+    "available_memory_bytes": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 0 }
+      ],
+      "default": null
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
 }
-

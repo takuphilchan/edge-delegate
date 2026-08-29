@@ -1,4 +1,12 @@
-"""Privacy and data-egress checks; implementation is deferred."""
+"""Deterministic external-data privacy checks."""
 
-# TODO(wiring): classify, minimize, redact, and authorize data movement.
+from edge_delegate.contracts import ExternalHandoff, Policy, PrivacyClass
+
+
+def disallowed_handoff_classes(
+    handoff: ExternalHandoff, policy: Policy
+) -> frozenset[PrivacyClass]:
+    if not policy.external_allowed:
+        return handoff.included_privacy_classes
+    return handoff.included_privacy_classes - policy.external_privacy_classes
 

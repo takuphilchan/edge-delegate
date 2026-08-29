@@ -1,0 +1,14 @@
+{
+  "schema_version": "policy.v0",
+  "policy_id": "example-local-only",
+  "granted_permissions": ["display.write"],
+  "external_allowed": false,
+  "max_state_age_seconds": 2147483647,
+  "budget": {
+    "max_steps": 4,
+    "max_step_timeout_ms": 1000,
+    "max_total_latency_ms": 5000,
+    "max_total_energy_mj": 100
+  }
+}
+

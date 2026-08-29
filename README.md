@@ -1,45 +1,88 @@
 # Edge Delegate
 
-Working title for a model-assisted planning system that compiles natural-language requests into small, typed execution plans for constrained and embedded devices.
+Edge Delegate is a model-independent planning and safety runtime for constrained and embedded devices. It turns a candidate natural-language plan into a small, typed Plan IR, checks it against declared device capabilities, live state, permissions, approvals, privacy rules, and resource budgets, and only then permits execution.
 
-> Status: repository scaffold only. Runtime, training, and model logic will be wired in the next phase.
+The small model is not the security boundary and is not intended to be a general chatbot. It may propose a plan; deterministic code decides whether that plan is executable.
 
-## Intended outcome
+## Current status
 
-The system should decide whether a request can be handled locally, needs a hybrid local/external plan, should be handed to a larger language model, requires clarification or approval, must be deferred, or must be denied by policy.
+Version `0.1.0` implements the first deterministic vertical slice:
 
-The small model is not intended to be a general chatbot. Its differentiator is producing a verifiable intermediate representation (IR) against the device's declared capabilities, current state, privacy policy, and resource limits.
+- Strict versioned Python contracts and matching JSON Schemas
+- Bounded Plan-IR JSON parsing with duplicate-key and non-finite-number rejection
+- Stable canonical serialization and SHA-256 plan fingerprints
+- Capability, argument, prior-step reference, precondition, and route checks
+- Permission, exact-plan approval, connectivity, freshness, memory, latency, energy, and timeout checks
+- Mandatory idempotency for write and physical capabilities
+- Deterministic device simulation with sensors and state-changing capabilities
+- Sequential local execution with output-reference resolution and replay protection
+- Fail-closed request coordination and privacy-minimal audit events
+- CLI demo and contract-only validation command
+- Unit, property, integration, regression, safety, hardware, and CI checks
 
-## Planned boundaries
+Model inference, fine-tuning, external LLM handoff, dataset generation, and embedded export remain explicit later milestones.
 
-- `specs/` defines behavior before implementation.
-- `schemas/` contains versioned wire contracts.
-- `src/edge_delegate/contracts/` will expose typed Python contracts.
-- `src/edge_delegate/ir/` will parse and statically check plans.
-- `src/edge_delegate/policy/` will enforce privacy, approval, and risk rules outside the model.
-- `src/edge_delegate/planner/` will contain interchangeable small-model adapters.
-- `src/edge_delegate/runtime/` will coordinate validation and execution.
-- `src/edge_delegate/simulator/` will make plans testable without physical hardware.
-- `src/edge_delegate/connectors/` will isolate optional external-LLM access.
-- `src/edge_delegate/data/` will own dataset generation and provenance.
-- `src/edge_delegate/evaluation/` will measure correctness, safety, calibration, and hardware cost.
-- `benchmarks/` and `tests/` keep model quality separate from software correctness.
+## Environment setup
 
-## Candidate model strategy
-
-The configuration scaffold includes FunctionGemma 270M as the first constrained planner candidate and Qwen3 0.6B as a stronger comparison/teacher candidate. The contracts are intentionally model-independent so either can be replaced after evidence from the benchmark.
-
-## Local environment
-
-The existing WSL environment can be activated with:
+The existing WSL environment can be used directly:
 
 ```bash
+cd /mnt/d/project/edge-delegate
 source /home/phil/.venvs/edge-model/bin/activate
+python -m pip install -e ".[dev]"
 ```
 
-Dependency installation is intentionally deferred until the contracts and first vertical slice are agreed.
+The runtime itself has no third-party Python dependencies. The `dev` extra installs only testing, schema-validation, property-testing, and lint tooling.
 
-## Next phase
+## Run the vertical slice
 
-Wire one thin vertical slice: capability card -> request -> plan IR -> static check -> simulated execution. Only after that passes deterministic tests should model prompting, fine-tuning, quantization, or external-LLM handoff be added.
+```bash
+edge-delegate demo
+```
 
+The demo reads a simulated temperature, passes the typed result to a simulated display capability, validates the plan, executes it, and prints a structured outcome.
+
+Validate external contract files without executing anything:
+
+```bash
+edge-delegate validate \
+  --capabilities examples/local-display/capabilities.json \
+  --state examples/local-display/state.json \
+  --policy examples/local-display/policy.json \
+  --plan examples/local-display/plan.json \
+  --now 2026-01-01T12:00:00Z
+```
+
+An invalid plan exits with code `2`; malformed input or operational failure exits with code `1`.
+
+## Verify changes
+
+```bash
+make verify
+make test-hardware
+```
+
+Ordinary tests exclude hardware checks so the deterministic core runs on CI and non-GPU edge hosts. The hardware target is tested explicitly.
+
+## Repository boundaries
+
+- `specs/` defines architecture, contracts, threats, and evaluation rules.
+- `schemas/` contains the versioned public wire contracts.
+- `src/edge_delegate/contracts/` contains dependency-free Python contract types.
+- `src/edge_delegate/ir/` owns parsing, canonicalization, and static validation.
+- `src/edge_delegate/policy/` owns deterministic permission, privacy, approval, and risk logic.
+- `src/edge_delegate/planner/` defines the interchangeable planner protocol.
+- `src/edge_delegate/runtime/` coordinates validated execution, replay protection, and audit.
+- `src/edge_delegate/simulator/` provides deterministic capabilities without physical hardware.
+- `examples/` contains executable wire-format examples.
+- `benchmarks/` and `tests/` keep model quality separate from software correctness.
+
+## Next milestone
+
+The next milestone is a measured planner baseline, not immediate fine-tuning:
+
+1. Build simulator-derived gold and held-out planning cases.
+2. Implement capability retrieval and a prompt-only FunctionGemma adapter.
+3. Measure valid-plan rate, execution success, route accuracy, safety failures, calibration, latency, and memory.
+4. Compare with Qwen3 0.6B as a stronger baseline/teacher.
+5. Fine-tune only after the error analysis shows which failures data can actually fix.

@@ -1,4 +1,10 @@
-"""Network-condition simulator; implementation is deferred."""
+"""Named network profiles for deterministic offline and metered tests."""
 
-# TODO(wiring): model offline, intermittent, slow, and metered connectivity.
+from edge_delegate.contracts import Connectivity
+
+from .world import SimulatedWorld
+
+
+def apply_network_profile(world: SimulatedWorld, profile: Connectivity) -> None:
+    world.set_connectivity(profile)
 

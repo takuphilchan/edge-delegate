@@ -1,0 +1,12 @@
+{
+  "schema_version": "device-state.v0",
+  "snapshot_id": "example-state-1",
+  "observed_at": "2026-01-01T12:00:00Z",
+  "values": {
+    "environment.temperature_c": 24.5,
+    "display.last_value": null
+  },
+  "connectivity": "offline",
+  "available_memory_bytes": 134217728
+}
+

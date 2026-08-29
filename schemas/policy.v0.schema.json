@@ -2,9 +2,80 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://edge-delegate.local/schemas/policy.v0.schema.json",
   "title": "Policy v0",
-  "description": "Scaffold for permissions, approvals, privacy, and resource policy.",
   "type": "object",
   "additionalProperties": false,
-  "$comment": "Fields and invariants will be wired in the contract phase."
+  "required": ["schema_version", "policy_id"],
+  "properties": {
+    "schema_version": { "const": "policy.v0" },
+    "policy_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "granted_permissions": { "$ref": "#/$defs/stringSet" },
+    "allowed_capabilities": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/stringSet" }],
+      "default": null
+    },
+    "denied_capabilities": { "$ref": "#/$defs/stringSet" },
+    "approvals": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/approval" },
+      "default": []
+    },
+    "external_allowed": { "type": "boolean", "default": false },
+    "external_privacy_classes": {
+      "type": "array",
+      "items": {
+        "enum": ["public", "internal", "personal", "sensitive", "secret"]
+      },
+      "uniqueItems": true,
+      "default": ["public"]
+    },
+    "require_approval_for_physical": { "type": "boolean", "default": true },
+    "max_state_age_seconds": { "type": "integer", "minimum": 0, "default": 300 },
+    "budget": { "$ref": "#/$defs/budget" }
+  },
+  "$defs": {
+    "stringSet": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "default": []
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grant_id", "request_id", "capability_id", "plan_sha256", "expires_at"],
+      "properties": {
+        "grant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "capability_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": { "type": "integer", "minimum": 1, "default": 8 },
+        "max_step_timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30000
+        },
+        "max_total_latency_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 60000
+        },
+        "max_total_energy_mj": {
+          "type": "number",
+          "minimum": 0,
+          "default": 10000
+        }
+      },
+      "default": {}
+    }
+  }
 }
-

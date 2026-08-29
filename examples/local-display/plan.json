@@ -1,0 +1,22 @@
+{
+  "schema_version": "plan-ir.v0",
+  "request_id": "example-display-temperature",
+  "route": "local",
+  "steps": [
+    {
+      "step_id": "read_temperature",
+      "capability_id": "sensor.temperature.read"
+    },
+    {
+      "step_id": "show_temperature",
+      "capability_id": "display.value.show",
+      "arguments": {
+        "value": { "$ref": "read_temperature" }
+      },
+      "idempotency_key": "example-show-temperature"
+    }
+  ],
+  "reason_codes": [],
+  "confidence": 1.0,
+  "clarification": null
+}

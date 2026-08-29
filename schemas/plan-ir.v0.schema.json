@@ -2,9 +2,93 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://edge-delegate.local/schemas/plan-ir.v0.schema.json",
   "title": "Plan IR v0",
-  "description": "Scaffold for a typed, verifiable edge execution plan.",
   "type": "object",
   "additionalProperties": false,
-  "$comment": "Fields and invariants will be wired in the contract phase."
+  "required": ["schema_version", "request_id", "route"],
+  "properties": {
+    "schema_version": { "const": "plan-ir.v0" },
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "route": {
+      "enum": ["local", "hybrid", "external", "clarify", "defer", "deny"]
+    },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" },
+      "default": []
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "uniqueItems": true,
+      "default": []
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0
+    },
+    "clarification": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 1000 }
+      ],
+      "default": null
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$ref"],
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        }
+      }
+    },
+    "argumentValue": {
+      "anyOf": [
+        { "$ref": "#/$defs/reference" },
+        { "$ref": "#/$defs/jsonValue" }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "capability_id"],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "capability_id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/argumentValue" },
+          "default": {}
+        },
+        "timeout_ms": { "type": "integer", "minimum": 1 },
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    }
+  }
 }
-

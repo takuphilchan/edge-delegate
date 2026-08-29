@@ -4,11 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edge-delegate"
-version = "0.0.0"
+version = "0.1.0"
 description = "Model-independent edge request planner and delegation runtime"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+edge-delegate = "edge_delegate.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "hypothesis>=6,<7",
+  "jsonschema>=4.26,<5",
+  "pytest>=9.1,<10",
+  "ruff>=0.16.5,<0.17",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -18,5 +29,19 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --strict-config --strict-markers -m 'not hardware'"
+markers = [
+  "hardware: tests that require or measure a declared hardware target",
+]
 
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

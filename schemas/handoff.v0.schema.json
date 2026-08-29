@@ -2,8 +2,59 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://edge-delegate.local/schemas/handoff.v0.schema.json",
   "title": "External Handoff v0",
-  "description": "Scaffold for a minimal, policy-filtered external-model request.",
   "type": "object",
   "additionalProperties": false,
-  "$comment": "Fields and invariants will be wired in the contract phase."
+  "required": [
+    "schema_version",
+    "request_id",
+    "reason",
+    "task",
+    "context",
+    "questions",
+    "included_privacy_classes",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "handoff.v0" },
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "task": { "type": "string", "minLength": 1, "maxLength": 8000 },
+    "context": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "questions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 },
+      "minItems": 1
+    },
+    "included_privacy_classes": {
+      "type": "array",
+      "items": {
+        "enum": ["public", "internal", "personal", "sensitive", "secret"]
+      },
+      "uniqueItems": true
+    },
+    "removed_fields": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 },
+      "default": []
+    },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
 }

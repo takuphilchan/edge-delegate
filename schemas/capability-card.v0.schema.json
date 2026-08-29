@@ -2,9 +2,115 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://edge-delegate.local/schemas/capability-card.v0.schema.json",
   "title": "Capability Card v0",
-  "description": "Scaffold for a versioned device capability declaration.",
   "type": "object",
   "additionalProperties": false,
-  "$comment": "Fields and invariants will be wired in the contract phase."
+  "required": [
+    "schema_version",
+    "capability_id",
+    "version",
+    "description",
+    "arguments"
+  ],
+  "properties": {
+    "schema_version": { "const": "capability-card.v0" },
+    "capability_id": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+    },
+    "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "arguments": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1, "maxLength": 128 },
+      "additionalProperties": { "$ref": "#/$defs/valueSpec" }
+    },
+    "result": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/valueSpec" }],
+      "default": null
+    },
+    "preconditions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/predicate" },
+      "default": []
+    },
+    "side_effect": {
+      "enum": ["none", "read", "write", "physical"],
+      "default": "none"
+    },
+    "permissions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "default": []
+    },
+    "approval_required": { "type": "boolean", "default": false },
+    "privacy_classes": {
+      "type": "array",
+      "items": {
+        "enum": ["public", "internal", "personal", "sensitive", "secret"]
+      },
+      "uniqueItems": true,
+      "default": ["public"]
+    },
+    "cost": { "$ref": "#/$defs/resourceCost" }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    },
+    "valueSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": ["any", "null", "boolean", "integer", "number", "string", "array", "object"]
+        },
+        "required": { "type": "boolean", "default": true },
+        "enum": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" },
+          "default": []
+        },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" }
+      }
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "operator", "value"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "operator": { "enum": ["exists", "eq", "ne", "gt", "gte", "lt", "lte", "in"] },
+        "value": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "resourceCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "latency_ms": { "type": "integer", "minimum": 0, "default": 0 },
+        "energy_mj": { "type": "number", "minimum": 0, "default": 0 },
+        "memory_bytes": { "type": "integer", "minimum": 0, "default": 0 },
+        "network_required": { "type": "boolean", "default": false }
+      },
+      "default": {}
+    }
+  }
 }
-

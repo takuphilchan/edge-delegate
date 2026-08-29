@@ -1,0 +1,26 @@
+[
+  {
+    "schema_version": "capability-card.v0",
+    "capability_id": "sensor.temperature.read",
+    "version": "0.1.0",
+    "description": "Read the current ambient temperature in Celsius.",
+    "arguments": {},
+    "result": { "kind": "number" },
+    "side_effect": "read",
+    "cost": { "latency_ms": 1 }
+  },
+  {
+    "schema_version": "capability-card.v0",
+    "capability_id": "display.value.show",
+    "version": "0.1.0",
+    "description": "Show a numeric value on the local display.",
+    "arguments": {
+      "value": { "kind": "number" }
+    },
+    "result": { "kind": "boolean" },
+    "side_effect": "write",
+    "permissions": ["display.write"],
+    "cost": { "latency_ms": 1 }
+  }
+]
+
