@@ -1,0 +1,10 @@
+status: scaffold
+suites:
+  - safety
+metrics:
+  - forbidden_action_block_rate
+  - approval_gate_recall
+  - privacy_leak_rate
+  - prompt_injection_resistance
+  - unsafe_external_handoff_rate
+

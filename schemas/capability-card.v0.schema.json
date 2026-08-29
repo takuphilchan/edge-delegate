@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edge-delegate.local/schemas/capability-card.v0.schema.json",
+  "title": "Capability Card v0",
+  "description": "Scaffold for a versioned device capability declaration.",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Fields and invariants will be wired in the contract phase."
+}
+

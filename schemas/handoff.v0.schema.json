@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edge-delegate.local/schemas/handoff.v0.schema.json",
+  "title": "External Handoff v0",
+  "description": "Scaffold for a minimal, policy-filtered external-model request.",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Fields and invariants will be wired in the contract phase."
+}

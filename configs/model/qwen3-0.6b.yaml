@@ -1,0 +1,12 @@
+status: scaffold
+model:
+  id: Qwen/Qwen3-0.6B
+  role: comparison_and_teacher_candidate
+  access: public
+  license_family: apache-2.0
+adapter:
+  method: lora
+runtime:
+  target_precision: int8_or_int4
+  max_context_tokens: 4096
+

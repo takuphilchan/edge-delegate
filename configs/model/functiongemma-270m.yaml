@@ -1,0 +1,12 @@
+status: scaffold
+model:
+  id: google/functiongemma-270m-it
+  role: primary_edge_planner_candidate
+  access: gated
+  license_family: gemma
+adapter:
+  method: lora
+runtime:
+  target_precision: int8_or_int4
+  max_context_tokens: 2048
+

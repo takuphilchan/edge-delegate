@@ -1,0 +1,2 @@
+"""Small-footprint capability retrieval."""
+

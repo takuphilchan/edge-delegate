@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edge-delegate.local/schemas/policy.v0.schema.json",
+  "title": "Policy v0",
+  "description": "Scaffold for permissions, approvals, privacy, and resource policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Fields and invariants will be wired in the contract phase."
+}
+

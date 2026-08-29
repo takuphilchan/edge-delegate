@@ -1,0 +1,14 @@
+status: scaffold
+suites:
+  - smoke
+  - gold
+  - heldout
+  - multilingual
+metrics:
+  - schema_validity
+  - static_plan_validity
+  - execution_success
+  - route_accuracy
+  - clarification_quality
+  - calibration_error
+

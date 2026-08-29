@@ -1,0 +1,8 @@
+status: scaffold
+purpose: validate_the_training_pipeline_not_model_quality
+seed: 17
+max_steps: 20
+precision: bf16
+dataset_manifest: data/manifests/smoke.json
+output_dir: artifacts/training/smoke
+

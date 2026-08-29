@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edge-delegate.local/schemas/device-state.v0.schema.json",
+  "title": "Device State v0",
+  "description": "Scaffold for an observable, time-bounded device-state snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Fields and invariants will be wired in the contract phase."
+}
+
