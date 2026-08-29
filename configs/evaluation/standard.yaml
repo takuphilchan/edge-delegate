@@ -1,4 +1,4 @@
-status: scaffold
+status: software_harness_implemented
 suites:
   - smoke
   - gold
@@ -11,4 +11,5 @@ metrics:
   - route_accuracy
   - clarification_quality
   - calibration_error
-
+  - brier_score
+  - selective_accuracy

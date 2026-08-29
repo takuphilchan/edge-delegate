@@ -1,4 +1,10 @@
-"""Dataset-generation entry-point scaffold; intentionally contains no logic."""
+"""Compatibility entry point for deterministic dataset generation."""
 
-# TODO(wiring): build scenarios and labels through the deterministic simulator.
+from __future__ import annotations
 
+import sys
+
+from edge_delegate.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main(["generate-data", *sys.argv[1:]]))

@@ -1,4 +1,10 @@
-"""Evaluation entry-point scaffold; intentionally contains no runner logic."""
+"""Compatibility entry point for planner evaluation."""
 
-# TODO(wiring): run named suites and write a reproducible result bundle.
+from __future__ import annotations
 
+import sys
+
+from edge_delegate.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main(["evaluate", *sys.argv[1:]]))

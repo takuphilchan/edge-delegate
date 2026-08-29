@@ -1,12 +1,17 @@
-status: scaffold
+status: prompt_baseline_ready
 model:
   id: google/functiongemma-270m-it
   role: primary_edge_planner_candidate
   access: gated
   license_family: gemma
+planner:
+  prompt_version: functiongemma-plan-v0
+  output_tool: submit_plan
+  retrieval: lexical_bm25
+  deterministic_validation_required: true
 adapter:
   method: lora
+  status: not_started_pending_baseline_error_analysis
 runtime:
   target_precision: int8_or_int4
   max_context_tokens: 2048
-

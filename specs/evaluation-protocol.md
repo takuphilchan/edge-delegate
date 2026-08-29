@@ -1,6 +1,6 @@
 # Evaluation Protocol
 
-Status: deterministic software baseline implemented; model benchmark pending
+Status: deterministic evaluator and prompt adapter implemented; real-model benchmark pending
 
 ## Evaluation layers
 
@@ -14,8 +14,8 @@ Status: deterministic software baseline implemented; model benchmark pending
 
 ## Benchmark discipline
 
-Templates, device families, and paraphrase clusters must be split before generation so held-out results do not measure memorization. Every dataset build will carry a source manifest and content fingerprint.
+Templates, device families, and paraphrase clusters are assigned together so held-out results do not measure paraphrase memorization. Safety-tagged groups are isolated. Every dataset build carries record, split, and complete-dataset fingerprints plus a source manifest. Gold labels come from reviewed scenarios and deterministic execution, never from an unchecked model.
 
 ## Current automated baseline
 
-The repository runs contract/schema, malformed-output, property, integration, regression, policy-boundary, idempotency, audit-minimization, and explicit CUDA visibility tests. Model-quality, calibration, multilingual, latency, memory, and energy benchmarks remain pending until the first planner adapter and dataset manifest exist.
+The repository runs contract/schema, malformed-output, property, integration, regression, policy-boundary, idempotency, audit-minimization, retrieval, strict adapter, grouped-data, evaluation-harness, and explicit CUDA visibility tests. The gold self-check must score 100% and only proves the harness is internally consistent. Prompt-only FunctionGemma quality, multilingual behavior, model latency, memory, and energy remain pending gated-checkpoint execution.

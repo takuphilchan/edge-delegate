@@ -8,6 +8,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from edge_delegate import __version__
 from edge_delegate.contracts import (
     CapabilityCard,
     DeviceState,
@@ -20,8 +21,15 @@ from edge_delegate.contracts import (
     StepReference,
     ValueKind,
 )
+from edge_delegate.data import generate_records, validate_records, write_dataset
+from edge_delegate.evaluation import EvaluationRunner
 from edge_delegate.ir import check_plan, parse_plan
-from edge_delegate.planner import StaticPlanner
+from edge_delegate.planner import (
+    DEFAULT_MODEL_ID,
+    FunctionGemmaPlanner,
+    StaticPlanner,
+    TransformersFunctionGemmaBackend,
+)
 from edge_delegate.runtime import Coordinator
 from edge_delegate.simulator import ManualClock, SimulatedWorld
 from edge_delegate.simulator.actuators import register_state_writer
@@ -167,12 +175,63 @@ def _demo_command(args: argparse.Namespace) -> int:
     return 0 if result.status.value == "executed" else 1
 
 
+def _generate_data_command(args: argparse.Namespace) -> int:
+    manifest = write_dataset(args.output, seed=args.seed)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
+def _load_jsonl(path: Path) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if len(line.encode("utf-8")) > MAX_CONTRACT_BYTES:
+                raise ValueError(f"JSONL line {line_number} exceeds the size limit")
+            if not line.strip():
+                continue
+            value = json.loads(
+                line,
+                object_pairs_hook=_object_without_duplicates,
+                parse_constant=_reject_json_constant,
+            )
+            if not isinstance(value, dict):
+                raise ValueError(f"JSONL line {line_number} must be an object")
+            records.append(value)
+    return records
+
+
+def _evaluate_command(args: argparse.Namespace) -> int:
+    records = generate_records() if args.dataset is None else _load_jsonl(args.dataset)
+    validate_records(records)
+    if args.planner == "gold":
+        plans = {
+            str(record["record_id"]): PlanIR.from_dict(record["expected_plan"])
+            for record in records
+        }
+        planner = StaticPlanner(plans)
+    else:
+        planner = FunctionGemmaPlanner(
+            TransformersFunctionGemmaBackend(model_id=args.model_id),
+            retrieval_limit=args.retrieval_limit,
+            max_new_tokens=args.max_new_tokens,
+        )
+    report = EvaluationRunner(planner).evaluate(records)
+    rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    if args.output is None:
+        print(rendered, end="")
+    else:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered, encoding="utf-8", newline="\n")
+        print(json.dumps({"output": str(args.output), "metrics": report["metrics"]}, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edge-delegate",
         description="Validate and execute typed edge plans against declared capabilities.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
     demo = commands.add_parser("demo", help="run the deterministic local vertical slice")
@@ -188,6 +247,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="timezone-aware ISO-8601 validation time; defaults to the current time",
     )
     validate.set_defaults(handler=_validate_command)
+
+    generate_data = commands.add_parser(
+        "generate-data",
+        help="build the deterministic scenario dataset and FunctionGemma SFT export",
+    )
+    generate_data.add_argument("--output", required=True, type=Path)
+    generate_data.add_argument("--seed", type=int, default=17)
+    generate_data.set_defaults(handler=_generate_data_command)
+
+    evaluate = commands.add_parser(
+        "evaluate",
+        help="evaluate the gold harness or a local FunctionGemma checkpoint",
+    )
+    evaluate.add_argument("--dataset", type=Path, help="JSONL dataset; defaults to generated cases")
+    evaluate.add_argument("--planner", choices=("gold", "functiongemma"), default="gold")
+    evaluate.add_argument("--model-id", default=DEFAULT_MODEL_ID)
+    evaluate.add_argument("--retrieval-limit", type=int, default=8)
+    evaluate.add_argument("--max-new-tokens", type=int, default=1024)
+    evaluate.add_argument("--output", type=Path)
+    evaluate.set_defaults(handler=_evaluate_command)
     return parser
 
 

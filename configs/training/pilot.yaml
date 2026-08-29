@@ -1,4 +1,4 @@
-status: scaffold
+status: blocked_on_measured_prompt_baseline
 purpose: first_measured_adapter_training_run
 seed: 17
 epochs: 3
@@ -6,4 +6,3 @@ precision: bf16
 gradient_checkpointing: true
 dataset_manifest: data/manifests/pilot.json
 output_dir: artifacts/training/pilot
-

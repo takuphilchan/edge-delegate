@@ -1,12 +1,12 @@
 # Architecture
 
-Status: implemented deterministic core (`0.1.0`)
+Status: deterministic core and prompt-planner baseline implemented (`0.2.0`)
 
 ## Purpose
 
 Define the boundary between probabilistic planning and deterministic validation, policy enforcement, execution, and audit.
 
-## Planned request path
+## Request path
 
 1. Read a request, capability card, device state, and policy.
 2. Retrieve only capabilities relevant to the request.
@@ -29,6 +29,14 @@ The model may propose a plan. It never grants itself permissions, bypasses valid
 - Runtime coordination composes planner, validation, simulation or hardware adapters, and audit.
 - External connectors remain outside the local execution boundary.
 
+## FunctionGemma boundary
+
+The adapter presents one synthetic `submit_plan(plan_json)` tool. This lets the model propose a complete dependent plan while keeping FunctionGemma's role limited to function calling. The returned string is parsed as strict Plan IR, checked against live contracts, and rejected before execution if any invariant fails. The adapter cannot call capabilities itself.
+
+The backend is replaceable: deterministic tests use a scripted backend, while the optional Transformers backend loads the gated checkpoint lazily. Model packages and weights are not runtime dependencies of the deterministic core.
+
+This shape follows Google's [FunctionGemma model card](https://ai.google.dev/gemma/docs/functiongemma/model_card), [formatting guidance](https://ai.google.dev/gemma/docs/functiongemma/formatting-and-best-practices), and [full function-calling sequence](https://ai.google.dev/gemma/docs/functiongemma/full-function-calling-sequence-with-functiongemma). The guidance positions FunctionGemma for task-specific function calling and does not describe dependent multi-step workflow planning as a native strength; `submit_plan` makes that limitation measurable without weakening validation.
+
 ## Failure and retry semantics
 
 - Malformed planner output, unknown fields, unknown capabilities, stale state, or failed policy checks fail closed.
@@ -40,4 +48,4 @@ The model may propose a plan. It never grants itself permissions, bypasses valid
 
 ## Implemented deployment boundary
 
-The current executor targets a deterministic host-side simulator. Physical hardware adapters must implement the same capability boundary and preserve output validation, idempotency, timeout, and audit guarantees. MCU-adjacent packaging and model runtimes are not implemented yet.
+The current executor targets a deterministic host-side simulator. Physical hardware adapters must implement the same capability boundary and preserve output validation, idempotency, timeout, and audit guarantees. MCU-adjacent packaging, external handoff execution, training, and exported model runtimes are not implemented yet.
