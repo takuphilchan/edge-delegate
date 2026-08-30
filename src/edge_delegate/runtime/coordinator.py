@@ -7,17 +7,16 @@ from enum import StrEnum
 
 from edge_delegate.contracts import PlanIR, PlanningRequest, Policy, Route
 from edge_delegate.ir import (
-    PlanParseError,
+    PlanValidationError,
     StaticCheckReport,
-    check_plan,
-    parse_plan,
     plan_fingerprint,
+    validate_plan,
 )
-from edge_delegate.planner import Planner, PlannerContext
-from edge_delegate.simulator import SimulatedWorld
+from edge_delegate.planner.base import Planner, PlannerContext, PlannerOutputError
 
 from .audit import InMemoryAuditLog
 from .executor import ExecutionResult, ExecutionStatus, Executor
+from .ports import AuditSink, DeviceGateway
 
 
 class CoordinatorStatus(StrEnum):
@@ -46,19 +45,19 @@ class Coordinator:
         self,
         *,
         planner: Planner,
-        world: SimulatedWorld,
+        world: DeviceGateway,
         policy: Policy,
         executor: Executor | None = None,
-        audit: InMemoryAuditLog | None = None,
+        audit: AuditSink | None = None,
     ) -> None:
         self._planner = planner
         self._world = world
         self._policy = policy
-        self._executor = executor or Executor()
-        self._audit = audit or InMemoryAuditLog()
+        self._executor = Executor() if executor is None else executor
+        self._audit = InMemoryAuditLog() if audit is None else audit
 
     @property
-    def audit(self) -> InMemoryAuditLog:
+    def audit(self) -> AuditSink:
         return self._audit
 
     def handle(self, request: PlanningRequest) -> CoordinatorResult:
@@ -69,8 +68,9 @@ class Coordinator:
             policy=self._policy,
         )
         try:
-            output = self._planner.plan(request, context)
-            plan = output if isinstance(output, PlanIR) else parse_plan(output)
+            plan = self._planner.plan(request, context)
+            if not isinstance(plan, PlanIR):
+                raise PlannerOutputError("planner did not return typed Plan IR")
         except Exception as exc:
             self._audit.append(
                 request_id=request.request_id,
@@ -83,7 +83,7 @@ class Coordinator:
                 request_id=request.request_id,
                 status=(
                     CoordinatorStatus.INVALID_PLAN
-                    if isinstance(exc, PlanParseError)
+                    if isinstance(exc, PlannerOutputError)
                     else CoordinatorStatus.PLANNER_FAILED
                 ),
                 message=str(exc),
@@ -104,14 +104,16 @@ class Coordinator:
                 message="plan request_id does not match the request",
             )
 
-        report = check_plan(
-            plan,
-            context.capabilities,
-            state,
-            self._policy,
-            now=self._world.clock.now(),
-        )
-        if not report.valid:
+        try:
+            validated = validate_plan(
+                plan,
+                context.capabilities,
+                state,
+                self._policy,
+                now=self._world.clock.now(),
+            )
+        except PlanValidationError as exc:
+            report = exc.report
             self._audit.append(
                 request_id=request.request_id,
                 event_type="validation",
@@ -126,6 +128,7 @@ class Coordinator:
                 validation=report,
                 message="candidate plan failed deterministic validation",
             )
+        report = validated.report
 
         self._audit.append(
             request_id=request.request_id,
@@ -135,11 +138,7 @@ class Coordinator:
             timestamp=self._world.clock.now(),
         )
         if plan.route in {Route.LOCAL, Route.HYBRID}:
-            from edge_delegate.ir import ValidatedPlan
-
-            execution = self._executor.execute(
-                ValidatedPlan(plan=plan, report=report), self._world
-            )
+            execution = self._executor.execute(validated, self._world, self._policy)
             self._audit.append(
                 request_id=request.request_id,
                 event_type="execution",

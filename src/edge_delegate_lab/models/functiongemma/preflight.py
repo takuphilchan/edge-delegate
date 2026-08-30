@@ -1,4 +1,4 @@
-"""Validate SFT exports before they can reach an optimizer."""
+"""Validate FunctionGemma SFT exports before they can reach an optimizer."""
 
 from __future__ import annotations
 

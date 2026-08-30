@@ -2,7 +2,7 @@
 
 import sys
 
-from edge_delegate.cli import main
+from edge_delegate_lab.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main(["train", *sys.argv[1:]]))

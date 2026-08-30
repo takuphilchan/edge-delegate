@@ -63,7 +63,7 @@ def test_planner_retrieves_cards_and_records_exact_tool_prompt(
         ),
     )
 
-    assert output == plan_json
+    assert canonicalize_plan(output) == plan_json
     call = backend.calls[0]
     assert call["messages"][0]["content"] == FUNCTIONGEMMA_DEVELOPER_MESSAGE
     prompt = json.loads(call["messages"][1]["content"])

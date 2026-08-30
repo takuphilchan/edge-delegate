@@ -9,13 +9,14 @@ from threading import RLock
 from edge_delegate.contracts import CapabilityCard, Connectivity, DeviceState
 from edge_delegate.contracts._validation import json_value
 from edge_delegate.contracts.state import JsonValue
+from edge_delegate.runtime.ports import CapabilityExecutionError
 
 from .clock import ManualClock
 
 type CapabilityHandler = Callable[[Mapping[str, JsonValue], SimulatedWorld], JsonValue]
 
 
-class CapabilityInvocationError(RuntimeError):
+class CapabilityInvocationError(CapabilityExecutionError):
     """Raised when a simulated capability cannot be invoked safely."""
 
 
@@ -121,7 +122,9 @@ class SimulatedWorld:
             expected = set(card.arguments)
             supplied = set(arguments)
             missing = sorted(
-                name for name, spec in card.arguments.items() if spec.required and name not in supplied
+                name
+                for name, spec in card.arguments.items()
+                if spec.required and name not in supplied
             )
             if missing:
                 raise CapabilityInvocationError(f"missing argument(s): {', '.join(missing)}")
@@ -142,7 +145,9 @@ class SimulatedWorld:
             except CapabilityInvocationError:
                 raise
             except Exception as exc:
-                raise CapabilityInvocationError(f"capability handler failed: {capability_id}") from exc
+                raise CapabilityInvocationError(
+                    f"capability handler failed: {capability_id}"
+                ) from exc
             if card.result is None and result is not None:
                 raise CapabilityInvocationError("capability returned an undeclared result")
             if card.result is not None and not card.result.matches(result):

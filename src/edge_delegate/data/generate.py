@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from edge_delegate.contracts import (
-    CapabilityCard,
     Connectivity,
     DeviceState,
     ExecutionBudget,
@@ -20,13 +20,9 @@ from edge_delegate.contracts import (
     StepReference,
     ValueKind,
 )
-from edge_delegate.ir import canonicalize_plan, check_plan
+from edge_delegate.ir import check_plan
+from edge_delegate.model_plugins.api import TrainableModelPlugin
 from edge_delegate.planner import StaticPlanner
-from edge_delegate.planner.prompts import (
-    SUBMIT_PLAN_TOOL,
-    build_planner_messages,
-    sft_assistant_message,
-)
 from edge_delegate.runtime import Coordinator, CoordinatorStatus
 from edge_delegate.simulator import ManualClock, SimulatedWorld
 from edge_delegate.simulator.actuators import register_state_writer
@@ -241,6 +237,13 @@ def build_world(*, connectivity: Connectivity = Connectivity.OFFLINE) -> Simulat
     return world
 
 
+def build_record_world(record: dict[str, object]) -> SimulatedWorld:
+    """Construct the executable v0 simulator fixture declared by a dataset record."""
+
+    state = DeviceState.from_dict(record["state"])
+    return build_world(connectivity=state.connectivity)
+
+
 def _plan_for(template: ScenarioTemplate, request_id: str) -> PlanIR:
     steps: tuple[PlanStep, ...] = ()
     if template.template_id == "temperature-display":
@@ -362,42 +365,24 @@ def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
             handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def _sft_record(record: dict[str, object]) -> dict[str, object]:
-    request = PlanningRequest.from_dict(record["request"])
-    cards = tuple(
-        CapabilityCard.from_dict(card, f"$.capabilities[{index}]")
-        for index, card in enumerate(record["capabilities"])
-    )
-    state = DeviceState.from_dict(record["state"])
-    policy = Policy.from_dict(record["policy"])
-    plan = PlanIR.from_dict(record["expected_plan"])
-    messages: list[dict[str, object]] = list(build_planner_messages(request, state, policy, cards))
-    messages.append(sft_assistant_message(canonicalize_plan(plan)))
-    metadata = record["metadata"]
-    group_id = "|".join(
-        str(metadata[name]) for name in ("template_id", "paraphrase_cluster", "device_family")
-    )
-    return {
-        "record_id": record["record_id"],
-        "group_id": group_id,
-        "expected_route": plan.route.value,
-        "messages": messages,
-        "tools": [SUBMIT_PLAN_TOOL],
-    }
+def write_dataset(
+    output_dir: Path,
+    *,
+    seed: int = 17,
+    exporters: Sequence[TrainableModelPlugin] = (),
+) -> dict[str, object]:
+    """Write model-neutral data, then ask selected plugins for training exports."""
 
-
-def write_dataset(output_dir: Path, *, seed: int = 17) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records = generate_records()
     splits = split_records(records, seed=seed)
     _write_jsonl(output_dir / "all.jsonl", records)
     for name, members in splits.items():
         _write_jsonl(output_dir / f"{name}.jsonl", members)
-    for name, members in splits.items():
-        _write_jsonl(
-            output_dir / f"functiongemma-sft-{name}.jsonl",
-            [_sft_record(record) for record in members],
-        )
+    training_exports = [
+        dict(exporter.export_training_data(splits=splits, output_dir=output_dir))
+        for exporter in exporters
+    ]
     manifest: dict[str, object] = {
         "schema_version": "edge-delegate-manifest.v0",
         "dataset_version": DATASET_VERSION,
@@ -414,11 +399,7 @@ def write_dataset(output_dir: Path, *, seed: int = 17) -> dict[str, object]:
         "split_counts": {name: len(members) for name, members in splits.items()},
         "dataset_sha256": dataset_fingerprint(records),
         "split_sha256": {name: dataset_fingerprint(members) for name, members in splits.items()},
-        "sft_format": {
-            "model_family": "functiongemma",
-            "prompt_version": "functiongemma-plan-v0",
-            "loss_target": "assistant_tool_call_only",
-        },
+        "training_exports": training_exports,
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n",

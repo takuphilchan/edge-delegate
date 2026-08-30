@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
@@ -13,9 +14,9 @@ from edge_delegate.contracts import (
     Policy,
     Route,
 )
-from edge_delegate.ir import ValidatedPlan, check_plan, parse_plan
-from edge_delegate.planner import Planner, PlannerContext
-from edge_delegate.runtime import ExecutionStatus, Executor
+from edge_delegate.ir import check_plan, validate_plan
+from edge_delegate.planner import Planner, PlannerContext, PlannerOutputError
+from edge_delegate.runtime import DeviceGateway, ExecutionStatus, Executor
 
 from .calibration import brier_score, expected_calibration_error, selective_accuracy
 from .execution import compare_plans
@@ -32,24 +33,35 @@ class CaseResult:
     plan_exact: bool
     outcome_correct: bool
     execution_success: bool | None
-    confidence: float
+    confidence: float | None
     error: str | None = None
 
 
 class EvaluationRunner:
-    def __init__(self, planner: Planner) -> None:
+    def __init__(
+        self,
+        planner: Planner,
+        *,
+        execution_harness: Callable[[dict[str, object]], DeviceGateway] | None = None,
+    ) -> None:
         self._planner = planner
+        self._execution_harness = execution_harness
 
     def evaluate(self, records: list[dict[str, object]]) -> dict[str, object]:
         cases = [self._evaluate_record(record) for record in records]
-        confidences = [case.confidence for case in cases]
-        plan_successes = [
-            case.request_id_correct
-            and case.static_valid
-            and case.plan_exact
-            and case.execution_success is not False
+        calibration_cases = [
+            (
+                case.confidence,
+                case.request_id_correct
+                and case.static_valid
+                and case.plan_exact
+                and case.execution_success is not False,
+            )
             for case in cases
+            if case.confidence is not None
         ]
+        confidences = [confidence for confidence, _ in calibration_cases]
+        plan_successes = [success for _, success in calibration_cases]
 
         def rate(field: str) -> float:
             return sum(bool(getattr(case, field)) for case in cases) / len(cases) if cases else 0.0
@@ -58,7 +70,7 @@ class EvaluationRunner:
             case.execution_success for case in cases if case.execution_success is not None
         ]
         return {
-            "schema_version": "edge-delegate-evaluation.v0",
+            "schema_version": "edge-delegate-evaluation.v1",
             "evaluated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "case_count": len(cases),
             "metrics": {
@@ -72,14 +84,20 @@ class EvaluationRunner:
                 "local_execution_success_rate": (
                     sum(bool(item) for item in executable) / len(executable) if executable else None
                 ),
-                "brier_score": brier_score(confidences, plan_successes),
-                "expected_calibration_error": expected_calibration_error(
-                    confidences, plan_successes
+                "calibration_case_count": len(calibration_cases),
+                "brier_score": (
+                    brier_score(confidences, plan_successes) if calibration_cases else None
                 ),
-                "selective_accuracy": [
-                    asdict(point)
-                    for point in selective_accuracy(confidences, plan_successes)
-                ],
+                "expected_calibration_error": (
+                    expected_calibration_error(confidences, plan_successes)
+                    if calibration_cases
+                    else None
+                ),
+                "selective_accuracy": (
+                    [asdict(point) for point in selective_accuracy(confidences, plan_successes)]
+                    if calibration_cases
+                    else []
+                ),
             },
             "cases": [asdict(case) for case in cases],
         }
@@ -98,11 +116,12 @@ class EvaluationRunner:
         )
         expected = PlanIR.from_dict(record["expected_plan"])
         try:
-            output = self._planner.plan(
+            predicted = self._planner.plan(
                 request,
                 PlannerContext(capabilities=cards, state=state, policy=policy),
             )
-            predicted = output if isinstance(output, PlanIR) else parse_plan(output)
+            if not isinstance(predicted, PlanIR):
+                raise PlannerOutputError("planner did not return typed Plan IR")
         except Exception as exc:
             return CaseResult(
                 record_id=record_id,
@@ -114,7 +133,7 @@ class EvaluationRunner:
                 plan_exact=False,
                 outcome_correct=False,
                 execution_success=None,
-                confidence=0.0,
+                confidence=None,
                 error=f"{type(exc).__name__}: {exc}",
             )
         comparison = compare_plans(predicted, expected)
@@ -130,20 +149,27 @@ class EvaluationRunner:
             Route.DEFER: "deferred" if candidate_valid else "invalid_plan",
             Route.DENY: "denied" if candidate_valid else "invalid_plan",
         }[predicted.route]
-        execution_success = None
+        execution_success: bool | None = None
+        execution_error: str | None = None
         if expected.route in {Route.LOCAL, Route.HYBRID}:
-            execution_success = False
-            if candidate_valid:
-                # Built-in benchmark records share this reviewed simulator factory. The
-                # static contract check above still supports arbitrary external records.
-                from edge_delegate.data.generate import build_world
-
-                world = build_world(connectivity=state.connectivity)
-                execution = Executor().execute(
-                    ValidatedPlan(plan=predicted, report=report),
-                    world,
-                )
-                execution_success = execution.status is ExecutionStatus.SUCCEEDED
+            if not candidate_valid or predicted.route not in {Route.LOCAL, Route.HYBRID}:
+                execution_success = False
+            elif self._execution_harness is not None:
+                try:
+                    device = self._execution_harness(record)
+                    validated = validate_plan(
+                        predicted,
+                        cards,
+                        state,
+                        policy,
+                        now=state.observed_at,
+                    )
+                    execution = Executor().execute(validated, device, policy)
+                    execution_success = execution.status is ExecutionStatus.SUCCEEDED
+                    execution_error = execution.error
+                except Exception as exc:
+                    execution_success = False
+                    execution_error = f"{type(exc).__name__}: {exc}"
         return CaseResult(
             record_id=record_id,
             parse_valid=True,
@@ -155,4 +181,5 @@ class EvaluationRunner:
             outcome_correct=predicted_status == expected_status,
             execution_success=execution_success,
             confidence=predicted.confidence,
+            error=execution_error,
         )

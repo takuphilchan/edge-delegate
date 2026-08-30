@@ -1,6 +1,6 @@
 """Interchangeable local planner-model adapters."""
 
-from .base import Planner, PlannerContext, PlannerError, PlannerOutput
+from .base import Planner, PlannerContext, PlannerError, PlannerOutputError
 from .functiongemma import (
     DEFAULT_MODEL_ID,
     FunctionCallFormatError,
@@ -11,6 +11,7 @@ from .functiongemma import (
     ModelDiagnostics,
     ScriptedFunctionGemmaBackend,
     TransformersFunctionGemmaBackend,
+    extract_plan,
     extract_plan_json,
     select_capabilities,
 )
@@ -27,10 +28,11 @@ __all__ = [
     "Planner",
     "PlannerContext",
     "PlannerError",
-    "PlannerOutput",
+    "PlannerOutputError",
     "ScriptedFunctionGemmaBackend",
     "StaticPlanner",
     "TransformersFunctionGemmaBackend",
+    "extract_plan",
     "extract_plan_json",
     "select_capabilities",
 ]

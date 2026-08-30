@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -40,16 +42,78 @@ class StaticCheckReport:
         return not self.issues
 
 
-@dataclass(frozen=True, slots=True)
+def _content_fingerprint(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class ValidatedPlan:
-    """A plan accompanied by evidence that deterministic checks passed."""
+    """A plan bound to the exact deterministic validation context."""
 
     plan: PlanIR
     report: StaticCheckReport
+    plan_sha256: str
+    capability_set_sha256: str
+    policy_sha256: str
+    state_sha256: str
+    state_snapshot_id: str
+    validated_at: datetime
 
-    def __post_init__(self) -> None:
-        if not self.report.valid:
+    def __init__(self, *args, **kwargs) -> None:
+        del args, kwargs
+        raise TypeError("ValidatedPlan cannot be constructed directly; use validate_plan")
+
+    @classmethod
+    def _issue(
+        cls,
+        *,
+        plan: PlanIR,
+        report: StaticCheckReport,
+        capabilities: Mapping[str, CapabilityCard],
+        state: DeviceState,
+        policy: Policy,
+        validated_at: datetime,
+    ) -> ValidatedPlan:
+        if not report.valid:
             raise ValueError("ValidatedPlan requires a valid report")
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "plan", plan)
+        object.__setattr__(instance, "report", report)
+        object.__setattr__(instance, "plan_sha256", plan_fingerprint(plan))
+        object.__setattr__(
+            instance,
+            "capability_set_sha256",
+            _content_fingerprint([capabilities[name].to_dict() for name in sorted(capabilities)]),
+        )
+        object.__setattr__(instance, "policy_sha256", _content_fingerprint(policy.to_dict()))
+        object.__setattr__(instance, "state_sha256", _content_fingerprint(state.to_dict()))
+        object.__setattr__(instance, "state_snapshot_id", state.snapshot_id)
+        object.__setattr__(instance, "validated_at", validated_at.astimezone(UTC))
+        return instance
+
+    def binding_error(
+        self,
+        capabilities: Mapping[str, CapabilityCard] | Iterable[CapabilityCard],
+        policy: Policy,
+    ) -> str | None:
+        cards = _capability_map(capabilities)
+        if plan_fingerprint(self.plan) != self.plan_sha256:
+            return "execution authorization plan fingerprint does not match"
+        active_capabilities = _content_fingerprint(
+            [cards[name].to_dict() for name in sorted(cards)]
+        )
+        if active_capabilities != self.capability_set_sha256:
+            return "execution authorization does not match active capabilities"
+        if _content_fingerprint(policy.to_dict()) != self.policy_sha256:
+            return "execution authorization does not match the active policy"
+        return None
 
 
 class PlanValidationError(ValueError):
@@ -260,7 +324,16 @@ def validate_plan(
     *,
     now: datetime | None = None,
 ) -> ValidatedPlan:
-    report = check_plan(plan, capabilities, state, policy, now=now)
+    cards = _capability_map(capabilities)
+    validated_at = (now or datetime.now(UTC)).astimezone(UTC)
+    report = check_plan(plan, cards, state, policy, now=validated_at)
     if not report.valid:
         raise PlanValidationError(report)
-    return ValidatedPlan(plan=plan, report=report)
+    return ValidatedPlan._issue(
+        plan=plan,
+        report=report,
+        capabilities=cards,
+        state=state,
+        policy=policy,
+        validated_at=validated_at,
+    )

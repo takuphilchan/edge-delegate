@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from threading import RLock
 
-type AuditValue = bool | int | float | str | None
+from .ports import AuditValue
 
 
 @dataclass(frozen=True, slots=True)

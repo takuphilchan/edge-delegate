@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime
 
 from edge_delegate.contracts import (
     CapabilityCard,
@@ -59,9 +58,7 @@ def validate_record(record: dict[str, object]) -> None:
     )
     state = DeviceState.from_dict(record["state"])
     policy = Policy.from_dict(record["policy"])
-    report = check_plan(
-        plan, cards, state, policy, now=datetime.fromisoformat("2026-01-01T12:00:00+00:00")
-    )
+    report = check_plan(plan, cards, state, policy, now=state.observed_at)
     if not report.valid:
         raise ValueError("expected plan fails deterministic validation")
     unsigned = dict(record)

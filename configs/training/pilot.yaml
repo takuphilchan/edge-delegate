@@ -1,5 +1,6 @@
-schema_version: edge-delegate-training.v0
+schema_version: edge-delegate-training.v1
 purpose: pilot_adapter
+plugin_id: functiongemma
 base_model_id: google/functiongemma-270m-it
 train_file: data/processed/pilot/functiongemma-sft-train.jsonl
 eval_file: data/processed/pilot/functiongemma-sft-validation.jsonl
@@ -14,6 +15,8 @@ per_device_eval_batch_size: 1
 gradient_accumulation_steps: 4
 gradient_checkpointing: false
 precision: bf16
+attention_backend: eager
+maximum_vram_fraction: 0.88
 lora_rank: 16
 lora_alpha: 32
 lora_dropout: 0.05

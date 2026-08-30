@@ -15,16 +15,9 @@ from edge_delegate.contracts import (
     Policy,
     Route,
 )
-from edge_delegate.ir import check_plan, parse_plan
-from edge_delegate.planner import (
-    FunctionCallFormatError,
-    FunctionGemmaPlanner,
-    FunctionPlanError,
-    PlannerContext,
-    ScriptedFunctionGemmaBackend,
-    TransformersFunctionGemmaBackend,
-    select_capabilities,
-)
+from edge_delegate.ir import check_plan
+from edge_delegate.model_plugins import ModelDiagnosticSession
+from edge_delegate.planner import PlannerContext
 
 from .execution import compare_plans
 
@@ -37,7 +30,6 @@ CONTROLLED_ROUTE_ORDER = (
     Route.HYBRID,
     Route.DENY,
 )
-type DiagnosticBackend = TransformersFunctionGemmaBackend | ScriptedFunctionGemmaBackend
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,14 +80,14 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 
 
 def _bounded_generation(
-    backend: DiagnosticBackend,
+    session: ModelDiagnosticSession,
     *,
     include_raw_output: bool,
 ) -> dict[str, object] | None:
-    generation = backend.last_generation
+    generation = session.last_generation(include_raw_output=include_raw_output)
     if generation is None:
         return None
-    result = generation.to_dict(include_raw_output=include_raw_output)
+    result = dict(generation)
     if include_raw_output:
         raw_output = str(result["raw_output"])
         result["raw_output"] = raw_output[:MAX_RAW_OUTPUT_CHARS]
@@ -108,18 +100,10 @@ class ModelDoctor:
 
     def __init__(
         self,
-        backend: DiagnosticBackend,
-        *,
-        retrieval_limit: int = 8,
-        max_new_tokens: int = 1024,
+        session: ModelDiagnosticSession,
     ) -> None:
-        self._backend = backend
-        self._retrieval_limit = retrieval_limit
-        self._planner = FunctionGemmaPlanner(
-            backend=backend,
-            retrieval_limit=retrieval_limit,
-            max_new_tokens=max_new_tokens,
-        )
+        self._session = session
+        self._planner = session.planner
 
     def run(
         self,
@@ -131,7 +115,11 @@ class ModelDoctor:
             self._run_case(record, include_raw_output=include_raw_output) for record in records
         ]
         generations = [case.generation for case in cases if case.generation is not None]
-        latencies = [float(item["latency_ms"]) for item in generations]
+        latencies = [
+            float(value)
+            for item in generations
+            if isinstance((value := item.get("latency_ms")), (int, float))
+        ]
         warm_latencies = latencies[1:]
 
         def rate(field: str) -> float:
@@ -142,7 +130,7 @@ class ModelDoctor:
             "purpose": "integration_smoke_not_model_quality_benchmark",
             "evaluated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "execution_policy": "model proposals were statically checked but never executed",
-            "model": self._backend.model_info.to_dict(),
+            "model": dict(self._session.model_info),
             "operational": {
                 "case_count": len(cases),
                 "generation_success_count": len(generations),
@@ -163,7 +151,7 @@ class ModelDoctor:
                     (
                         int(item["peak_gpu_memory_bytes"])
                         for item in generations
-                        if item["peak_gpu_memory_bytes"] is not None
+                        if item.get("peak_gpu_memory_bytes") is not None
                     ),
                     default=None,
                 ),
@@ -196,20 +184,13 @@ class ModelDoctor:
         )
         expected = PlanIR.from_dict(record["expected_plan"])
         context = PlannerContext(capabilities=cards, state=state, policy=policy)
-        selected = select_capabilities(request, context, limit=self._retrieval_limit)
-        selected_ids = tuple(card.capability_id for card in selected)
+        selected_ids = self._session.selected_capability_ids(request, context)
         try:
-            output = self._planner.plan(request, context)
-            predicted = parse_plan(output)
+            predicted = self._planner.plan(request, context)
         except Exception as exc:
-            if isinstance(exc, FunctionCallFormatError):
-                category = "output_format"
-            elif isinstance(exc, FunctionPlanError):
-                category = "invalid_plan_ir"
-            else:
-                category = "inference_error"
+            category = self._session.classify_error(exc)
             generation = _bounded_generation(
-                self._backend,
+                self._session,
                 include_raw_output=include_raw_output,
             )
             return DoctorCaseResult(
@@ -257,7 +238,7 @@ class ModelDoctor:
             static_issue_codes=tuple(issue.code for issue in report.issues),
             predicted_plan=predicted.to_dict(),
             generation=_bounded_generation(
-                self._backend,
+                self._session,
                 include_raw_output=include_raw_output,
             ),
         )

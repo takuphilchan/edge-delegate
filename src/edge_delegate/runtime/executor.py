@@ -9,11 +9,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from edge_delegate.contracts import Route, StepReference
+from edge_delegate.contracts.policy import Policy
 from edge_delegate.contracts.state import JsonValue
-from edge_delegate.ir import ValidatedPlan
-from edge_delegate.simulator import CapabilityInvocationError, SimulatedWorld
+from edge_delegate.ir import ValidatedPlan, check_plan
 
 from .idempotency import IdempotencyConflict, IdempotencyStore
+from .ports import CapabilityExecutionError, DeviceGateway, IdempotencyRepository
 
 
 class StepStatus(StrEnum):
@@ -42,6 +43,7 @@ class ExecutionResult:
     status: ExecutionStatus
     steps: tuple[StepExecution, ...]
     final_output: JsonValue = None
+    error: str | None = None
 
 
 def _invocation_fingerprint(capability_id: str, arguments: Mapping[str, JsonValue]) -> str:
@@ -56,13 +58,59 @@ def _invocation_fingerprint(capability_id: str, arguments: Mapping[str, JsonValu
 
 
 class Executor:
-    def __init__(self, *, idempotency: IdempotencyStore | None = None) -> None:
-        self._idempotency = idempotency or IdempotencyStore()
+    def __init__(self, *, idempotency: IdempotencyRepository | None = None) -> None:
+        self._idempotency = IdempotencyStore() if idempotency is None else idempotency
 
-    def execute(self, validated: ValidatedPlan, world: SimulatedWorld) -> ExecutionResult:
+    def execute(
+        self,
+        validated: ValidatedPlan,
+        device: DeviceGateway,
+        policy: Policy,
+    ) -> ExecutionResult:
         plan = validated.plan
         if plan.route not in {Route.LOCAL, Route.HYBRID}:
             raise ValueError("only local and hybrid local steps are executable")
+
+        try:
+            binding_error = validated.binding_error(device.capability_cards, policy)
+        except Exception as exc:
+            return ExecutionResult(
+                request_id=plan.request_id,
+                status=ExecutionStatus.FAILED,
+                steps=(),
+                error=f"execution authorization check failed: {type(exc).__name__}",
+            )
+        if binding_error is not None:
+            return ExecutionResult(
+                request_id=plan.request_id,
+                status=ExecutionStatus.FAILED,
+                steps=(),
+                error=binding_error,
+            )
+        try:
+            current_state = device.snapshot()
+            current_report = check_plan(
+                plan,
+                device.capability_cards,
+                current_state,
+                policy,
+                now=device.clock.now(),
+            )
+        except Exception as exc:
+            return ExecutionResult(
+                request_id=plan.request_id,
+                status=ExecutionStatus.FAILED,
+                steps=(),
+                error=f"execution preflight failed: {type(exc).__name__}",
+            )
+        if not current_report.valid:
+            codes = ",".join(sorted({issue.code for issue in current_report.issues}))
+            return ExecutionResult(
+                request_id=plan.request_id,
+                status=ExecutionStatus.FAILED,
+                steps=(),
+                error=f"execution preflight rejected the active device state: {codes}",
+            )
 
         outputs: dict[str, JsonValue] = {}
         records: list[StepExecution] = []
@@ -87,11 +135,11 @@ class Executor:
                     result = cached.result
                     status = StepStatus.REPLAYED
                 else:
-                    result = world.invoke(step.capability_id, arguments)
+                    result = device.invoke(step.capability_id, arguments)
                     status = StepStatus.SUCCEEDED
                     if scoped_key is not None:
                         self._idempotency.record(scoped_key, fingerprint, result)
-            except (CapabilityInvocationError, IdempotencyConflict, KeyError) as exc:
+            except (CapabilityExecutionError, IdempotencyConflict, KeyError) as exc:
                 records.append(
                     StepExecution(
                         step_id=step.step_id,
@@ -105,6 +153,23 @@ class Executor:
                     status=ExecutionStatus.FAILED,
                     steps=tuple(records),
                     final_output=None,
+                    error=str(exc),
+                )
+            except Exception as exc:
+                records.append(
+                    StepExecution(
+                        step_id=step.step_id,
+                        capability_id=step.capability_id,
+                        status=StepStatus.FAILED,
+                        error=f"device invocation failed: {type(exc).__name__}",
+                    )
+                )
+                return ExecutionResult(
+                    request_id=plan.request_id,
+                    status=ExecutionStatus.FAILED,
+                    steps=tuple(records),
+                    final_output=None,
+                    error=f"device invocation failed: {type(exc).__name__}",
                 )
             outputs[step.step_id] = result
             records.append(

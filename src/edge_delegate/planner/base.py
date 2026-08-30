@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from edge_delegate.contracts import CapabilityCard, DeviceState, PlanIR, PlanningRequest, Policy
 
-type PlannerOutput = PlanIR | str | bytes | bytearray | Mapping[str, object]
-
 
 class PlannerError(RuntimeError):
     """Raised when a planner cannot produce a candidate plan."""
+
+
+class PlannerOutputError(PlannerError):
+    """Raised when a planner backend emits an invalid typed proposal."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,6 @@ class PlannerContext:
 
 @runtime_checkable
 class Planner(Protocol):
-    def plan(self, request: PlanningRequest, context: PlannerContext) -> PlannerOutput:
+    def plan(self, request: PlanningRequest, context: PlannerContext) -> PlanIR:
         """Produce a candidate plan; deterministic validation happens afterward."""
         ...

@@ -8,11 +8,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Protocol, runtime_checkable
 
-from edge_delegate.contracts import CapabilityCard, PlanningRequest
+from edge_delegate.contracts import CapabilityCard, PlanIR, PlanningRequest
 from edge_delegate.ir import canonicalize_plan, parse_plan
 from edge_delegate.retrieval import CapabilityIndex
 
-from .base import Planner, PlannerContext, PlannerError
+from .base import Planner, PlannerContext, PlannerError, PlannerOutputError
 from .prompts import SUBMIT_PLAN_TOOL, build_planner_messages
 
 DEFAULT_MODEL_ID = "google/functiongemma-270m-it"
@@ -23,11 +23,11 @@ _FUNCTION_CALL = re.compile(
 )
 
 
-class FunctionCallFormatError(PlannerError):
+class FunctionCallFormatError(PlannerOutputError):
     """Raised when the model does not emit the required submit_plan call."""
 
 
-class FunctionPlanError(PlannerError):
+class FunctionPlanError(PlannerOutputError):
     """Raised when submit_plan contains malformed or invalid Plan IR."""
 
 
@@ -90,6 +90,7 @@ class TransformersFunctionGemmaBackend:
         adapter_path: str | None = None,
         device_map: str = "auto",
         dtype: str = "auto",
+        revision: str | None = None,
     ) -> None:
         try:
             import psutil
@@ -98,8 +99,8 @@ class TransformersFunctionGemmaBackend:
             from transformers import AutoModelForCausalLM, AutoProcessor
         except ImportError as exc:
             raise PlannerError(
-                "FunctionGemma inference requires the planner extra: "
-                "python -m pip install -e '.[planner]'"
+                "FunctionGemma inference requires the inference extra: "
+                "python -m pip install -e '.[inference]'"
             ) from exc
         self._torch = torch
         self._psutil = psutil
@@ -112,11 +113,12 @@ class TransformersFunctionGemmaBackend:
             torch.cuda.reset_peak_memory_stats()
         load_started = time.perf_counter()
         try:
-            self._processor = AutoProcessor.from_pretrained(model_id)
+            self._processor = AutoProcessor.from_pretrained(model_id, revision=revision)
             self._model = AutoModelForCausalLM.from_pretrained(
                 model_id,
                 device_map=device_map,
                 dtype=dtype,
+                revision=revision,
             )
             if adapter_path is not None:
                 from peft import PeftModel
@@ -218,8 +220,8 @@ class TransformersFunctionGemmaBackend:
         return raw_output
 
 
-def extract_plan_json(output: str) -> str:
-    """Accept only the exact FunctionGemma submit_plan call."""
+def extract_plan(output: str) -> PlanIR:
+    """Accept only the exact FunctionGemma call and return typed Plan IR."""
 
     if not isinstance(output, str):
         raise PlannerError("FunctionGemma backend output must be text")
@@ -232,7 +234,13 @@ def extract_plan_json(output: str) -> str:
         plan = parse_plan(candidate)
     except Exception as exc:
         raise FunctionPlanError(f"model returned invalid Plan IR: {exc}") from exc
-    return canonicalize_plan(plan)
+    return plan
+
+
+def extract_plan_json(output: str) -> str:
+    """Compatibility helper returning the canonical JSON for a strict typed plan."""
+
+    return canonicalize_plan(extract_plan(output))
 
 
 @dataclass(slots=True)
@@ -323,7 +331,7 @@ class FunctionGemmaPlanner(Planner):
     retrieval_limit: int = 8
     max_new_tokens: int = 1024
 
-    def plan(self, request: PlanningRequest, context: PlannerContext) -> str:
+    def plan(self, request: PlanningRequest, context: PlannerContext) -> PlanIR:
         selected = select_capabilities(request, context, limit=self.retrieval_limit)
         messages = build_planner_messages(request, context.state, context.policy, selected)
         output = self.backend.generate(
@@ -331,4 +339,4 @@ class FunctionGemmaPlanner(Planner):
             [SUBMIT_PLAN_TOOL],
             max_new_tokens=self.max_new_tokens,
         )
-        return extract_plan_json(output)
+        return extract_plan(output)

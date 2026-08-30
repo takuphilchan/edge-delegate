@@ -12,6 +12,7 @@ dependencies = []
 
 [project.scripts]
 edge-delegate = "edge_delegate.cli:main"
+edge-delegate-lab = "edge_delegate_lab.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -22,7 +23,16 @@ dev = [
 ]
 planner = [
   "accelerate>=1.14,<2",
+  "peft>=0.20,<0.21",
   "psutil>=7.2,<8",
+  "torch>=2.13,<3",
+  "transformers>=5.16,<6",
+]
+inference = [
+  "accelerate>=1.14,<2",
+  "peft>=0.20,<0.21",
+  "psutil>=7.2,<8",
+  "torch>=2.13,<3",
   "transformers>=5.16,<6",
 ]
 training = [
@@ -32,9 +42,13 @@ training = [
   "psutil>=7.2,<8",
   "pyyaml>=6.0,<7",
   "tensorboard>=2.21,<3",
+  "torch>=2.13,<3",
   "transformers>=5.16,<6",
   "trl>=1.12,<2",
 ]
+
+[project.entry-points."edge_delegate.model_plugins.v1"]
+functiongemma = "edge_delegate.model_plugins.functiongemma:plugin"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
