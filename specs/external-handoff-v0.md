@@ -14,4 +14,7 @@ Define the minimal, policy-filtered request that can be sent to an optional exte
 - Data classifications included and removed
 - Expiry
 
-The `handoff.v0` contract and privacy-class checks exist, but `0.1.0` intentionally does not transmit data or call an external model. External and hybrid routes return an explicit `external_required` coordinator status. Response constraints and local verification will be added before connector wiring.
+The `handoff.v0` data type and privacy-class checks exist, but version `0.3.0` does not construct
+or transmit a handoff and does not call an external model. External and hybrid routes return an
+explicit `external_required` coordinator status. Redaction, outbound policy enforcement, response
+constraints, response validation, provenance, and timeouts are required before connector wiring.

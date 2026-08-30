@@ -1,6 +1,6 @@
 # Threat Model
 
-Status: initial deterministic controls implemented (`0.1.0`)
+Status: initial deterministic controls implemented (`0.3.0`)
 
 ## Initial threats
 
@@ -27,7 +27,7 @@ Typed contracts, allowlists, static validation, explicit approval gates, bounded
 - Privacy-minimal audit events that exclude request text and step arguments
 - No external transmission path in the current release
 
-## Outstanding before model or connector release
+## Outstanding before deployment or connector release
 
 - Adversarial evaluation of retrieved capability text and model output
 - Handoff redaction, response constraints, and response validation

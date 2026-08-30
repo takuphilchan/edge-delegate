@@ -12,6 +12,10 @@ Status: deterministic evaluator, real-model diagnostics, and pilot adapter measu
 6. Calibration: confidence predicts actual plan success and triggers abstention appropriately.
 7. Hardware: latency, peak memory, package size, energy proxy, and cold-start cost meet a declared device profile.
 
+Calibration metrics include only parse-valid typed plans because malformed output has no
+trustworthy Plan-IR confidence. Reports record the calibration-eligible case count and use
+`null`, not a synthetic perfect score, when that count is zero.
+
 ## Benchmark discipline
 
 Templates, device families, and paraphrase clusters are assigned together so held-out results do not measure paraphrase memorization. Safety-tagged groups are isolated. Every dataset build carries record, split, and complete-dataset fingerprints plus a source manifest. Gold labels come from reviewed scenarios and deterministic execution, never from an unchecked model.
