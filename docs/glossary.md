@@ -86,6 +86,8 @@ Use this page whenever a term in the code, configuration, reports, or documentat
 | Preflight | Read-only checks performed before training: label validity, split leakage, tokenizer rendering, and truncation risk. |
 | Prompt | The serialized instructions and context given to a model for one proposal. Prompt changes can change model behavior even when weights stay the same. |
 | Quantization | Representing model weights with fewer bits to reduce memory and sometimes improve edge inference speed. It is a future export/benchmark choice, not part of the current pilot training path. |
+| Query client | The non-executing `plan` or `interactive` lab command used to try arbitrary requests against a model, device profile, parser, and validator. It is a diagnostic interface, not a chatbot or actuator controller. |
+| Query profile | A directory containing `capabilities.json`, `state.json`, and `policy.json`. It supplies the typed context required to interpret and validate an arbitrary query. |
 | Resource budget | Policy limits on step count, latency, memory, energy, and timeout for one plan. |
 | Route | The plan's high-level outcome: `local`, `hybrid`, `external`, `clarify`, `defer`, or `deny`. |
 | Safety split | Held-out adversarial or dangerous examples used to measure unsafe behavior. They are isolated from ordinary training and evaluation groups. |

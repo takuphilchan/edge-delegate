@@ -33,6 +33,8 @@ Version `0.3.0` has an implemented vertical slice:
   hardware adapters;
 - a model-neutral planner interface and versioned model-plugin interface;
 - a built-in FunctionGemma plugin with strict `submit_plan` parsing;
+- one-shot and interactive non-executing clients for testing arbitrary queries against a typed
+  device profile;
 - model-neutral scenario generation, isolated splits, supervised export, Low-Rank Adaptation
   (LoRA) training,
   portable artifact manifests, and evaluation;
@@ -91,6 +93,20 @@ edge-delegate-lab models
 edge-delegate-lab compute-inspect
 edge-delegate-lab compute-plan --plugin functiongemma
 ```
+
+After training an adapter, test one query without executing capabilities:
+
+```bash
+ADAPTER_DIR=artifacts/training/functiongemma-pilot-v0/final-adapter
+edge-delegate-lab plan \
+  --plugin functiongemma \
+  --adapter "$ADAPTER_DIR" \
+  --profile examples/local-display \
+  --text "Show the current temperature."
+```
+
+Use `edge-delegate-lab interactive` with the same plugin, adapter, and profile arguments to keep
+the model loaded while entering several queries.
 
 See the [runbook](docs/development-runbook.md) before generating data, training, or evaluating a
 real model. FunctionGemma is gated on Hugging Face and requires accepted terms and WSL-side

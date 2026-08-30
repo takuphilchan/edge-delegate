@@ -115,7 +115,7 @@ Verify an artifact without loading model weights:
 
 ```bash
 edge-delegate-lab artifact-verify \
-  --artifact artifacts/training/<run>/final-adapter
+  --artifact artifacts/training/functiongemma-pilot-v0/final-adapter
 ```
 
 Legacy adapter directories without a manifest are temporarily accepted by the FunctionGemma

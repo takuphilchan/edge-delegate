@@ -23,8 +23,10 @@ def test_lab_cli_owns_data_model_and_compute_commands() -> None:
         "compute-plan",
         "evaluate",
         "generate-data",
+        "interactive",
         "model-doctor",
         "models",
+        "plan",
         "train",
     }
 

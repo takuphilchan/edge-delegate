@@ -18,6 +18,7 @@ described in [System architecture](system-architecture.md); it does not redefine
 | Preflight training data | No model weights, but tokenizer access is needed | Yes on first download | Install `training`, then run `edge-delegate-lab train --preflight-only`. |
 | Train the Low-Rank Adaptation (LoRA) adapter | Yes; Brain Floating Point 16-bit (BF16) is required by the pilot config | Yes | Run `edge-delegate-lab train` with a fresh output directory. |
 | Evaluate a trained adapter | Yes for useful speed | Yes for the base model | Run the lab's `model-doctor` or `evaluate` with `--adapter`. |
+| Type arbitrary queries into a trained adapter | Yes for useful speed | Yes for the base model | Run `edge-delegate-lab plan` once or `edge-delegate-lab interactive` for a prompt loop. |
 
 ## Use the correct shell
 
@@ -234,7 +235,54 @@ edge-delegate-lab evaluate \
 
 No model proposal should be sent to a real actuator during model-quality evaluation.
 
-## Workflow 8: software verification
+## Workflow 8: type queries into a saved adapter
+
+The query client needs a profile directory containing `capabilities.json`, `state.json`, and
+`policy.json`. It uses that context to construct the real model prompt and statically validate the
+result. It never invokes a capability.
+
+Run one query:
+
+```bash
+ADAPTER_DIR=artifacts/training/functiongemma-pilot-v0/final-adapter
+edge-delegate-lab plan \
+  --plugin functiongemma \
+  --adapter "$ADAPTER_DIR" \
+  --profile examples/local-display \
+  --text "Show the current temperature."
+```
+
+The command prints selected capabilities, raw generation telemetry, parsed Plan IR, request-ID
+binding, and deterministic validation issues. Exit code `0` means the proposal parsed and passed
+validation, `2` means the model produced an invalid proposal, and `1` means setup or inference
+failed.
+
+Keep the model loaded for several queries:
+
+```bash
+edge-delegate-lab interactive \
+  --plugin functiongemma \
+  --adapter "$ADAPTER_DIR" \
+  --profile examples/local-display
+```
+
+Interactive commands:
+
+| Command | Effect |
+| --- | --- |
+| `/context` | Show the active capability IDs, complete state snapshot, and policy. |
+| `/raw on` or `/raw off` | Include or hide raw model output in later results. |
+| `/help` | Show the command summary. |
+| `/quit` | Exit the client and unload the model. |
+
+Use `--plugin-settings configs/local/strict-artifact-settings.json` when you want missing artifact
+manifests to fail closed. `--omit-raw-output` starts either client with raw output hidden.
+
+The two-step smoke adapter is expected to fail most queries; use it to verify loading and error
+reporting, not model quality. Do not type angle-bracket placeholders such as `<run>` into Bash:
+the shell treats them as file redirection. Assign an actual path to `ADAPTER_DIR` as shown above.
+
+## Workflow 9: software verification
 
 ```bash
 make verify
@@ -255,10 +303,10 @@ python -m pip check
 | `data/processed/pilot/*-sft-*.jsonl` | FunctionGemma training/evaluation lines | No; reproducible |
 | `artifacts/model-doctor/*.json` | Raw model integration diagnostics | No |
 | `artifacts/evaluation/*.json` | Evaluation reports | No |
-| `artifacts/training/<run>/checkpoint-*` | Intermediate adapters | No |
-| `artifacts/training/<run>/final-adapter/` | Selected adapter used with `--adapter` | No |
-| `artifacts/training/<run>/final-adapter/edge-delegate-artifact.json` | Portable plugin/base/tokenizer/protocol/dataset/file binding | No |
-| `artifacts/training/<run>/training-run.json` | Config, versions, fingerprints, hardware, and metrics | No |
+| `artifacts/training/{run-id}/checkpoint-*` | Intermediate adapters | No |
+| `artifacts/training/{run-id}/final-adapter/` | Selected adapter used with `--adapter` | No |
+| `artifacts/training/{run-id}/final-adapter/edge-delegate-artifact.json` | Portable plugin/base/tokenizer/protocol/dataset/file binding | No |
+| `artifacts/training/{run-id}/training-run.json` | Config, versions, fingerprints, hardware, and metrics | No |
 | `configs/training/*.yaml` | Reproducible committed experiment settings | Yes |
 | `configs/local/` | Machine-specific or one-off settings | No |
 
@@ -277,6 +325,7 @@ python -m pip check
 | CUDA is unavailable | PyTorch cannot use the NVIDIA GPU in the active WSL environment. | Recheck `torch.cuda.is_available()`, WSL driver visibility, and the activated environment. |
 | Out-of-memory error | Batch/context/adapter settings exceed GPU memory. | Reduce per-device batch first; preserve complete examples and use gradient accumulation rather than truncating labels. |
 | All generations succeeded but quality is zero | The model ran, but its proposals failed parsing or correctness checks. | Inspect raw doctor outputs and failure categories; this is a model/data problem, not proof that the runtime failed. |
+| `invalid choice: interactive` or `invalid choice: plan` | The active editable install predates the query client. | From the repository root, rerun `python -m pip install -e ".[training]"`, then check `edge-delegate-lab --help`. |
 | `external_required` result | The route is valid, but connector execution is intentionally not implemented. | Treat it as an explicit handoff requirement, not a completed external answer. |
 
 ## Decision gates before moving forward

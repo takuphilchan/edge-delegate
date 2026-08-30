@@ -160,7 +160,7 @@ The runner refuses to reuse a non-empty output directory. This prevents a new ru
 ## What is saved
 
 ```text
-artifacts/training/<run>/
+artifacts/training/{run-id}/
   checkpoint-*/             epoch checkpoints retained by save_total_limit
   final-adapter/            best adapter + tokenizer metadata
     edge-delegate-artifact.json
@@ -191,6 +191,12 @@ flowchart LR
 The lab Command-Line Interface selects the `functiongemma` plugin and passes `--adapter` through its versioned interface. The plugin verifies the portable manifest and file digests, pins the recorded base revision, attaches the adapter with Parameter-Efficient Fine-Tuning (PEFT), and returns a typed planner. Nothing in parsing, policy, validation, routing, or execution changes when an adapter is present.
 
 ## Model doctor versus full evaluation
+
+The `plan` and `interactive` commands are for manual exploration. They load a model plugin and a
+typed device profile, show the raw and parsed result, run deterministic static validation, and
+never execute the proposal. `interactive` keeps one model session loaded across queries so manual
+testing does not pay model load time repeatedly. These clients do not calculate accuracy because
+an arbitrary query has no gold plan.
 
 The model doctor selects one controlled record per route and never executes a proposed
 capability. It separates:

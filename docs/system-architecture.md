@@ -49,7 +49,7 @@ There are currently two ways a planner is constructed:
 flowchart LR
     Demo[edge-delegate demo] --> Static[StaticPlanner]
 
-    Lab[edge-delegate-lab evaluate or model-doctor] --> Registry[ModelPluginRegistry]
+    Lab[edge-delegate-lab plan, interactive, evaluate, or model-doctor] --> Registry[ModelPluginRegistry]
     Registry --> Plugin[Selected model plugin]
     Artifact[Optional adapter directory] --> Plugin
     Settings[Bounded plugin settings] --> Plugin
@@ -175,7 +175,7 @@ The separation is deliberate and tested:
 | Program | Commands | Intended environment |
 | --- | --- | --- |
 | `edge-delegate` | `demo`, `validate` | Small runtime/edge environment; no ML dependency required |
-| `edge-delegate-lab` | `generate-data`, `models`, `compute-inspect`, `compute-plan`, `train`, `artifact-verify`, `model-doctor`, `evaluate` | Development host with optional model/training packages |
+| `edge-delegate-lab` | `generate-data`, `models`, `compute-inspect`, `compute-plan`, `train`, `artifact-verify`, `plan`, `interactive`, `model-doctor`, `evaluate` | Development host with optional model/training packages |
 
 `tests/architecture/test_dependencies.py` rejects runtime imports of the simulator, model
 plugins, datasets, evaluation code, connectors, or lab package. `tests/unit/test_cli_boundaries.py`
@@ -205,7 +205,7 @@ them.
 | Planner | Static planner, strict FunctionGemma planner, scripted backend | More real model plugins and a production request service |
 | Local execution | Sequential execution, reference resolution, revalidation, idempotency | Target-specific concurrency or compensation semantics, if ever required |
 | External work | Route validation, `external_required` status, handoff data type | Redaction pipeline, connector, response contract, response validation, provenance, timeout/cancellation |
-| Model lifecycle | Data generation, plugin export, preflight, LoRA training, artifact verification, model doctor, evaluator | Deployment-quality dataset, embedded export, frozen representative device benchmarks |
+| Model lifecycle | Data generation, plugin export, preflight, LoRA training, artifact verification, non-executing query client, model doctor, evaluator | Deployment-quality dataset, embedded export, frozen representative device benchmarks |
 
 The code should be changed before a document claims that a planned boundary is implemented.
 

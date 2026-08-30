@@ -21,6 +21,7 @@ from edge_delegate.model_plugins import (
 )
 from edge_delegate.planner import StaticPlanner
 
+from .client import ClientProfile, QueryClient, interactive_help, render_result
 from .compute import detect_hardware_inventory
 
 MAX_RECORD_BYTES = 1024 * 1024
@@ -270,6 +271,88 @@ def _artifact_verify_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _query_client(args: argparse.Namespace) -> QueryClient:
+    profile = ClientProfile.load(args.profile)
+    plugin = available_model_plugins().get(args.plugin)
+    session = plugin.create_diagnostic_session(
+        artifact_path=args.adapter,
+        settings=_plugin_settings(args),
+    )
+    return QueryClient(
+        session,
+        profile,
+        locale=args.locale,
+    )
+
+
+def _plan_command(args: argparse.Namespace) -> int:
+    client = _query_client(args)
+    result = client.query(args.text, include_raw_output=not args.omit_raw_output)
+    print(render_result(result))
+    return 0 if result["valid"] else 2
+
+
+def _interactive_command(args: argparse.Namespace) -> int:
+    client = _query_client(args)
+    include_raw_output = not args.omit_raw_output
+    model_id = client.model_info.get("model_id", args.plugin)
+    print(f"Loaded {model_id}")
+    print(f"Profile: {client.profile.root}")
+    print(interactive_help())
+
+    def run_query(text: str) -> None:
+        result = client.query(text, include_raw_output=include_raw_output)
+        print(render_result(result))
+
+    if args.text is not None:
+        run_query(args.text)
+    while True:
+        try:
+            text = input("edge-delegate> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not text:
+            continue
+        if text in {"/quit", "/exit"}:
+            return 0
+        if text == "/help":
+            print(interactive_help())
+            continue
+        if text == "/context":
+            print(render_result(client.profile.to_dict()))
+            continue
+        if text.startswith("/raw"):
+            parts = text.split()
+            if len(parts) != 2 or parts[1] not in {"on", "off"}:
+                print("usage: /raw on|off")
+                continue
+            include_raw_output = parts[1] == "on"
+            print(f"raw model output: {'on' if include_raw_output else 'off'}")
+            continue
+        if text.startswith("/"):
+            print("unknown command; use /help")
+            continue
+        run_query(text)
+
+
+def _add_query_arguments(
+    command: argparse.ArgumentParser,
+    *,
+    text_required: bool,
+) -> None:
+    command.add_argument("--plugin", default="functiongemma")
+    command.add_argument("--plugin-settings", type=Path)
+    command.add_argument("--model-id")
+    command.add_argument("--adapter")
+    command.add_argument("--retrieval-limit", type=int)
+    command.add_argument("--max-new-tokens", type=int)
+    command.add_argument("--profile", required=True, type=Path)
+    command.add_argument("--locale", default="en")
+    command.add_argument("--text", required=text_required)
+    command.add_argument("--omit-raw-output", action="store_true")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edge-delegate-lab",
@@ -343,6 +426,20 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument("--artifact", required=True, type=Path)
     artifact.add_argument("--plugin", help="optionally require a specific plugin ID")
     artifact.set_defaults(handler=_artifact_verify_command)
+
+    plan = commands.add_parser(
+        "plan",
+        help="generate and validate one query without executing capabilities",
+    )
+    _add_query_arguments(plan, text_required=True)
+    plan.set_defaults(handler=_plan_command)
+
+    interactive = commands.add_parser(
+        "interactive",
+        help="keep a model loaded for non-executing interactive queries",
+    )
+    _add_query_arguments(interactive, text_required=False)
+    interactive.set_defaults(handler=_interactive_command)
     return parser
 
 
