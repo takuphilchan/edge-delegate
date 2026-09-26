@@ -254,7 +254,7 @@ def _artifact_verify_command(args: argparse.Namespace) -> int:
     plugin_id = args.plugin or manifest.plugin_id
     plugin = available_model_plugins().get(plugin_id)
     manifest.ensure_plugin_compatible(plugin.descriptor)
-    manifest.verify_files(root)
+    manifest.verify_files(root, descriptor=plugin.descriptor)
     print(
         json.dumps(
             {
@@ -301,7 +301,11 @@ def _interactive_command(args: argparse.Namespace) -> int:
     print(interactive_help())
 
     def run_query(text: str) -> None:
-        result = client.query(text, include_raw_output=include_raw_output)
+        try:
+            result = client.query(text, include_raw_output=include_raw_output)
+        except ValueError as exc:
+            print(f"Invalid query: {exc}")
+            return
         print(render_result(result))
 
     if args.text is not None:

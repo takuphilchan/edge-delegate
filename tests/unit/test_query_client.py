@@ -98,6 +98,44 @@ def test_query_client_preserves_raw_generation_when_plan_parsing_fails() -> None
     assert result["execution"]["attempted"] is False
 
 
+@pytest.mark.parametrize("text,locale", [("x" * 8001, "en"), ("hello", "x" * 36)])
+def test_query_client_validates_request_before_selection_and_inference(text, locale):
+    planner = EchoClarifyPlanner()
+
+    class NoSelectionSession(FakeSession):
+        def selected_capability_ids(self, request, context):
+            pytest.fail("invalid input must not reach capability selection")
+
+    client = QueryClient(
+        NoSelectionSession(planner), ClientProfile.load(EXAMPLE_PROFILE), locale=locale
+    )
+    with pytest.raises(ValueError):
+        client.query(text)
+    assert planner.requests == []
+
+
+def test_query_client_accepts_maximum_request_length():
+    client = QueryClient(FakeSession(EchoClarifyPlanner()), ClientProfile.load(EXAMPLE_PROFILE))
+    assert client.query("x" * 8000)["valid"] is True
+
+
+@pytest.mark.parametrize("bad_output", ["not a plan", {}, None])
+def test_query_client_handles_untyped_plugin_output_and_recovers(bad_output):
+    class RecoveringPlanner(EchoClarifyPlanner):
+        def plan(self, request, context):
+            if not self.requests:
+                self.requests.append(request)
+                return bad_output
+            return super().plan(request, context)
+
+    client = QueryClient(FakeSession(RecoveringPlanner()), ClientProfile.load(EXAMPLE_PROFILE))
+    failure = client.query("first request")
+    assert failure["valid"] is False
+    assert failure["failure"]["error_type"] == "PlannerOutputError"
+    assert failure["execution"]["attempted"] is False
+    assert client.query("second request")["valid"] is True
+
+
 def test_profile_loader_reports_missing_contract_files(tmp_path) -> None:
     with pytest.raises(ValueError, match=r"profile is missing capabilities\.json"):
         ClientProfile.load(tmp_path)
@@ -144,3 +182,21 @@ def test_interactive_command_reuses_model_and_controls_raw_output(
         "client-query-0001",
         "client-query-0002",
     ]
+
+
+def test_interactive_invalid_input_does_not_end_or_reload_session(monkeypatch, capsys):
+    planner = EchoClarifyPlanner()
+    client = QueryClient(FakeSession(planner), ClientProfile.load(EXAMPLE_PROFILE))
+    loads = []
+
+    def load(args):
+        loads.append(args)
+        return client
+
+    monkeypatch.setattr("edge_delegate_lab.cli._query_client", load)
+    responses = iter(("x" * 8001, "valid request", "/quit"))
+    monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
+    assert lab_main(["interactive", "--profile", str(EXAMPLE_PROFILE)]) == 0
+    assert "Invalid query:" in capsys.readouterr().out
+    assert len(loads) == 1
+    assert [request.text for request in planner.requests] == ["valid request"]

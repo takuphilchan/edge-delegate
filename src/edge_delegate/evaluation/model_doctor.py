@@ -17,7 +17,7 @@ from edge_delegate.contracts import (
 )
 from edge_delegate.ir import check_plan
 from edge_delegate.model_plugins import ModelDiagnosticSession
-from edge_delegate.planner import PlannerContext
+from edge_delegate.planner import PlannerContext, PlannerOutputError
 
 from .execution import compare_plans
 
@@ -187,6 +187,8 @@ class ModelDoctor:
         selected_ids = self._session.selected_capability_ids(request, context)
         try:
             predicted = self._planner.plan(request, context)
+            if not isinstance(predicted, PlanIR):
+                raise PlannerOutputError("planner did not return typed Plan IR")
         except Exception as exc:
             category = self._session.classify_error(exc)
             generation = _bounded_generation(

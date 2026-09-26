@@ -126,8 +126,38 @@ class ModelArtifactManifest:
             raise ValueError("artifact model-plugin API is incompatible")
         if self.plan_protocol_id not in descriptor.supported_protocols:
             raise ValueError("artifact plan protocol is not supported by the selected plugin")
+        contracts = [
+            contract
+            for contract in descriptor.artifact_contracts
+            if (
+                contract.plan_protocol_id,
+                contract.plan_protocol_version,
+                contract.plan_schema,
+            )
+            == (self.plan_protocol_id, self.plan_protocol_version, self.plan_schema)
+        ]
+        if not contracts:
+            raise ValueError(
+                "artifact protocol version / plan schema is not supported by the plugin"
+            )
+        layouts = [
+            contract
+            for contract in contracts
+            if (contract.adapter_method, contract.adapter_format)
+            == (self.adapter_method, self.adapter_format)
+        ]
+        if not layouts:
+            raise ValueError("artifact adapter method / format is not supported by the plugin")
+        if not any(
+            set(contract.required_adapter_files) <= self.adapter_files.keys()
+            and set(contract.required_tokenizer_files) <= self.tokenizer_files.keys()
+            for contract in layouts
+        ):
+            raise ValueError("artifact manifest omits required adapter or tokenizer file hashes")
 
-    def verify_files(self, root: Path) -> None:
+    def verify_files(self, root: Path, *, descriptor: ModelPluginDescriptor) -> None:
+        """Check plugin compatibility and required coverage before checking all digests."""
+        self.ensure_plugin_compatible(descriptor)
         root = root.resolve()
         self._verify_file_map(root, self.tokenizer_files, "tokenizer")
         self._verify_file_map(root, self.adapter_files, "adapter")

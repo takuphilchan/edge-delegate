@@ -16,6 +16,7 @@ from edge_delegate.planner import (
     FunctionGemmaPlanner,
     FunctionPlanError,
     PlannerContext,
+    PlannerOutputError,
     TransformersFunctionGemmaBackend,
     select_capabilities,
 )
@@ -25,7 +26,7 @@ from edge_delegate.planner.prompts import (
     sft_assistant_message,
 )
 
-from .api import ModelPluginDescriptor
+from .api import ArtifactContract, ModelPluginDescriptor
 from .artifact import ModelArtifactManifest
 from .compute import ModelComputeCapabilities
 
@@ -64,7 +65,7 @@ class FunctionGemmaDiagnosticSession:
     def classify_error(self, error: Exception) -> str:
         if isinstance(error, FunctionCallFormatError):
             return "output_format"
-        if isinstance(error, FunctionPlanError):
+        if isinstance(error, (FunctionPlanError, PlannerOutputError)):
             return "invalid_plan_ir"
         return "inference_error"
 
@@ -75,6 +76,17 @@ class FunctionGemmaModelPlugin:
         package_version=__version__,
         display_name="Google FunctionGemma",
         supported_protocols=(FUNCTIONGEMMA_PROTOCOL_ID,),
+        artifact_contracts=(
+            ArtifactContract(
+                plan_protocol_id=FUNCTIONGEMMA_PROTOCOL_ID,
+                plan_protocol_version="1",
+                plan_schema="plan-ir.v0",
+                adapter_method="lora",
+                adapter_format="peft",
+                required_adapter_files=("adapter_config.json", "adapter_model.safetensors"),
+                required_tokenizer_files=("tokenizer.json", "tokenizer_config.json"),
+            ),
+        ),
     )
     compute_capabilities = ModelComputeCapabilities(
         supported_precisions=("bf16", "fp16", "fp32"),
@@ -153,17 +165,18 @@ class FunctionGemmaModelPlugin:
         if not isinstance(allow_legacy, bool):
             raise ValueError("FunctionGemma allow_legacy_artifact must be boolean")
         revision = None
+        max_context_tokens = self.compute_capabilities.maximum_context_tokens
         if artifact_path is not None:
             root = Path(artifact_path)
             manifest_path = root / "edge-delegate-artifact.json"
             if manifest_path.is_file():
                 manifest = ModelArtifactManifest.read(manifest_path)
-                manifest.ensure_plugin_compatible(self.descriptor)
-                manifest.verify_files(root)
+                manifest.verify_files(root, descriptor=self.descriptor)
                 if configured_model_id is not None and model_id != manifest.base_model_id:
                     raise ValueError("configured base model does not match the artifact manifest")
                 model_id = manifest.base_model_id
                 revision = manifest.base_model_revision
+                max_context_tokens = min(max_context_tokens, manifest.max_context_tokens)
             elif not allow_legacy:
                 raise ValueError("adapter is missing edge-delegate-artifact.json")
         backend = TransformersFunctionGemmaBackend(
@@ -172,6 +185,7 @@ class FunctionGemmaModelPlugin:
             device_map=device_map,
             dtype=dtype,
             revision=revision,
+            max_context_tokens=max_context_tokens,
         )
         return backend, retrieval_limit, max_new_tokens
 

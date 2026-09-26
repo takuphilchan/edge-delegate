@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 
 import pytest
 
 from edge_delegate.model_plugins import (
     MODEL_PLUGIN_API_VERSION,
+    ArtifactContract,
     ComputeRequest,
     GpuInventory,
     HardwareInventory,
@@ -27,6 +29,17 @@ class FakeModelPlugin:
         package_version="1.0.0",
         display_name="No-ML test plugin",
         supported_protocols=("fake-submit-plan",),
+        artifact_contracts=(
+            ArtifactContract(
+                plan_protocol_id="fake-submit-plan",
+                plan_protocol_version="1",
+                plan_schema="plan-ir.v0",
+                adapter_method="lora",
+                adapter_format="test",
+                required_adapter_files=("adapter/model.bin",),
+                required_tokenizer_files=("tokenizer.json",),
+            ),
+        ),
     )
     compute_capabilities = ModelComputeCapabilities(
         supported_precisions=("fp32",),
@@ -118,9 +131,124 @@ def test_artifact_manifest_round_trips_and_verifies_adapter_files(tmp_path) -> N
     manifest.write(path)
     loaded = ModelArtifactManifest.read(path)
     loaded.ensure_plugin_compatible(FakeModelPlugin().descriptor)
-    loaded.verify_files(tmp_path)
+    loaded.verify_files(tmp_path, descriptor=FakeModelPlugin.descriptor)
 
     assert loaded == manifest
+
+
+@pytest.mark.parametrize(
+    "change,match",
+    [
+        ({"plan_protocol_version": "999"}, "protocol version / plan schema"),
+        ({"plan_schema": "plan-ir.v999"}, "protocol version / plan schema"),
+        ({"adapter_format": "unsupported"}, "adapter method / format"),
+        ({"adapter_method": "unsupported"}, "adapter method / format"),
+        ({"adapter_files": {"config.json": "d" * 64}}, "omits required"),
+        ({"tokenizer_files": {"config.json": "d" * 64}}, "omits required"),
+    ],
+)
+def test_manifest_rejects_incompatible_contract_or_missing_coverage(tmp_path, change, match):
+    manifest = replace(_manifest(adapter_digest="d" * 64), **change)
+    with pytest.raises(ValueError, match=match):
+        manifest.ensure_plugin_compatible(FakeModelPlugin.descriptor)
+    with pytest.raises(ValueError, match=match):
+        manifest.verify_files(tmp_path, descriptor=FakeModelPlugin.descriptor)
+
+
+def test_manifest_allows_compatible_plugin_package_update():
+    manifest = _manifest(adapter_digest="d" * 64)
+    manifest.ensure_plugin_compatible(replace(FakeModelPlugin.descriptor, package_version="1.1.0"))
+
+
+def test_manifest_rejects_plugin_without_declared_artifact_contract():
+    manifest = _manifest(adapter_digest="d" * 64)
+    with pytest.raises(ValueError, match="not supported"):
+        manifest.ensure_plugin_compatible(
+            replace(FakeModelPlugin.descriptor, artifact_contracts=())
+        )
+
+
+def _functiongemma_artifact(tmp_path):
+    files = {
+        "adapter_config.json": b"{}",
+        "adapter_model.safetensors": b"test weights",
+        "tokenizer.json": b"test tokenizer",
+        "tokenizer_config.json": b"{}",
+    }
+    for name, content in files.items():
+        (tmp_path / name).write_bytes(content)
+    digests = {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}
+    return replace(
+        _manifest(adapter_digest="d" * 64),
+        plugin_id="functiongemma",
+        plan_protocol_id="functiongemma-submit-plan",
+        adapter_format="peft",
+        adapter_files={
+            name: digest for name, digest in digests.items() if name.startswith("adapter")
+        },
+        tokenizer_files={
+            name: digest for name, digest in digests.items() if name.startswith("tokenizer")
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["adapter_model.safetensors", "adapter_config.json", "tokenizer.json", "tokenizer_config.json"],
+)
+def test_functiongemma_requires_all_loader_files_in_manifest(tmp_path, monkeypatch, missing):
+    from edge_delegate.model_plugins.functiongemma import FunctionGemmaModelPlugin
+    from edge_delegate_lab.cli import main
+
+    manifest = _functiongemma_artifact(tmp_path)
+    field = "adapter_files" if missing.startswith("adapter") else "tokenizer_files"
+    manifest = replace(
+        manifest,
+        **{
+            field: {
+                name: digest for name, digest in getattr(manifest, field).items() if name != missing
+            }
+        },
+    )
+    manifest.write(tmp_path / "edge-delegate-artifact.json")
+
+    def no_load(**kwargs):
+        pytest.fail("invalid artifact must fail before model loading")
+
+    monkeypatch.setattr(
+        "edge_delegate.model_plugins.functiongemma.TransformersFunctionGemmaBackend", no_load
+    )
+    with pytest.raises(ValueError, match="omits required"):
+        FunctionGemmaModelPlugin().create_planner(artifact_path=str(tmp_path), settings={})
+    assert main(["artifact-verify", "--artifact", str(tmp_path)]) == 1
+
+
+def test_functiongemma_passes_artifact_context_limit_to_backend(tmp_path, monkeypatch):
+    from edge_delegate.model_plugins.functiongemma import FunctionGemmaModelPlugin
+
+    manifest = replace(_functiongemma_artifact(tmp_path), max_context_tokens=512)
+    manifest.write(tmp_path / "edge-delegate-artifact.json")
+    settings_seen = {}
+
+    def backend(**kwargs):
+        settings_seen.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        "edge_delegate.model_plugins.functiongemma.TransformersFunctionGemmaBackend", backend
+    )
+    FunctionGemmaModelPlugin().create_planner(artifact_path=str(tmp_path), settings={})
+    assert settings_seen["max_context_tokens"] == 512
+    assert settings_seen["revision"] == manifest.base_model_revision
+
+
+def test_artifact_digest_mismatch_is_still_rejected(tmp_path):
+    from edge_delegate.model_plugins.functiongemma import FunctionGemmaModelPlugin
+
+    manifest = _functiongemma_artifact(tmp_path)
+    (tmp_path / "adapter_model.safetensors").write_bytes(b"changed weights")
+    with pytest.raises(ValueError, match="digest does not match"):
+        manifest.verify_files(tmp_path, descriptor=FunctionGemmaModelPlugin.descriptor)
 
 
 def test_artifact_manifest_rejects_paths_outside_the_artifact_root() -> None:

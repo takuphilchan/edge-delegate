@@ -109,7 +109,29 @@ A completed training run writes `edge-delegate-artifact.json` beside the adapter
 - training recipe identifier and version;
 - context length and supported precision.
 
-When an adapter is loaded, the plugin checks the manifest, uses its recorded base model unless the operator explicitly supplies a conflicting one, pins the recorded revision, and verifies every recorded tokenizer/configuration and adapter file before creating the planner. This prevents accidental mixing of an adapter, tokenizer, base revision, or protocol from different experiments.
+When an adapter is loaded, the plugin checks the manifest, uses its recorded base model unless
+the operator explicitly supplies a conflicting one, pins the recorded revision, and verifies
+file hashes before creating the planner. Verification checks required coverage as well as
+digests: a manifest listing only a configuration file cannot leave the weights unchecked.
+
+Each plugin declares `artifact_contracts` in its `ModelPluginDescriptor`. An `ArtifactContract`
+names one supported combination of protocol ID, protocol version, Plan-IR schema, adapter
+method, and adapter format, plus the adapter and tokenizer files that must have hashes.
+The shared verifier checks those declarations; it does not contain model-family filenames.
+An empty declaration means the plugin has not opted into loading manifest-bearing artifacts.
+
+FunctionGemma currently supports `functiongemma-submit-plan` version `1`, `plan-ir.v0`, and
+LoRA adapters in `peft` format. It requires hashes for `adapter_config.json`,
+`adapter_model.safetensors`, `tokenizer.json`, and `tokenizer_config.json`. Additional listed
+files, such as `chat_template.jinja`, are also verified. The inference backend currently loads
+the processor from the pinned base-model revision, not from the saved tokenizer directory.
+
+Both `artifact-verify` and the FunctionGemma loader call
+`manifest.verify_files(root, descriptor=plugin.descriptor)`. This rejects incompatible protocol
+versions/schemas, unsupported adapter layouts, missing required hashes/files, and changed file
+contents. Package versions remain recorded provenance: a compatible plugin update does not
+have to match the training-time package version exactly. These hashes detect inconsistency;
+they are not a signature proving an artifact came from a trusted publisher.
 
 Verify an artifact without loading model weights:
 
@@ -121,6 +143,19 @@ edge-delegate-lab artifact-verify \
 Legacy adapter directories without a manifest are temporarily accepted by the FunctionGemma
 plugin for compatibility. New artifacts should always contain the manifest. Set
 `allow_legacy_artifact` to `false` in plugin settings when testing a strict deployment path.
+
+## Inference context budget
+
+Before generation, the FunctionGemma backend tokenizes the complete prompt, including the
+capability cards and tool definition. It requires **prompt tokens + reserved output tokens**
+to fit within the context limit. That limit is the smallest of the plugin limit (currently
+2,048), the artifact's declared context length when present, and the loaded model's context
+limit when available.
+
+An oversized request fails before device transfer or generation; nothing is silently truncated.
+Shorten the request, reduce `--retrieval-limit`, or reduce `--max-new-tokens`. A smaller output
+budget can still produce an incomplete plan, which the parser rejects. This guard bounds the
+context, but does not guarantee that every model configuration fits available GPU memory.
 
 ## Compute selection
 
@@ -154,7 +189,7 @@ The resolver does not yet probe several candidate microbatches, sample GPU utili
 ## Adding another model correctly
 
 1. Create a separate package or isolated module implementing `InferenceModelPlugin`.
-2. Give it a stable lowercase identifier and declare the Plan protocol it understands.
+2. Give it a stable lowercase identifier and declare the Plan protocol it understands. For saved artifacts, add `ArtifactContract` entries covering supported versions, schemas, layouts, and every required loader file; call `verify_files(..., descriptor=self.descriptor)` before loading weights.
 3. Translate its native output into a typed `PlanIR`; do not return arbitrary text to the coordinator.
 4. Implement a diagnostic session so the shared doctor can record model information, selected capabilities, generation telemetry, and model-specific parse failures.
 5. If it is trainable, implement the optional training export and trainer methods. Keep its tokenizer, template, loss masking, and trainer code inside that model's implementation.

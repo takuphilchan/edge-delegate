@@ -1,6 +1,7 @@
 """Tests for the strict FunctionGemma adapter boundary."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -141,6 +142,7 @@ def test_transformers_backend_uses_official_deterministic_generation_settings() 
     backend._torch = FakeTorch()
     backend._psutil = FakePsutil()
     backend._last_generation = None
+    backend._max_context_tokens = 15
 
     output = backend.generate(
         [{"role": "user", "content": "test"}],
@@ -155,3 +157,31 @@ def test_transformers_backend_uses_official_deterministic_generation_settings() 
     assert processor.decode_call["skip_special_tokens"] is True
     assert backend.last_generation.prompt_tokens == 3
     assert backend.last_generation.generated_tokens == 2
+
+
+def test_transformers_backend_rejects_over_budget_prompt_before_device_transfer_or_generation():
+    class NoTransferBatch(dict):
+        def to(self, device):
+            pytest.fail("over-budget prompt must not be transferred to a device")
+
+    class Processor:
+        def apply_chat_template(self, *args, **kwargs):
+            return NoTransferBatch(input_ids=SimpleNamespace(shape=(1, 1000)))
+
+    backend = object.__new__(TransformersFunctionGemmaBackend)
+    backend._processor = Processor()
+    backend._max_context_tokens = 1024
+    backend._last_generation = "stale generation"
+    # No model or torch is attached: the guard must run before accessing either.
+    with pytest.raises(
+        PlannerError, match=r"1000 prompt tokens \+ 25 reserved output tokens > 1024"
+    ):
+        backend.generate([{"role": "user", "content": "test"}], [], max_new_tokens=25)
+    assert backend.last_generation is None
+
+
+@pytest.mark.parametrize("budget", [0, -1, True, 1.5])
+def test_transformers_backend_rejects_invalid_output_budget(budget):
+    backend = object.__new__(TransformersFunctionGemmaBackend)
+    with pytest.raises(ValueError, match="positive integer"):
+        backend.generate([], [], max_new_tokens=budget)

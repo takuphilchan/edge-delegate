@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from edge_delegate.contracts import CapabilityCard, DeviceState, PlanningRequest, Policy
+from edge_delegate.contracts import CapabilityCard, DeviceState, PlanIR, PlanningRequest, Policy
 from edge_delegate.ir import check_plan
 from edge_delegate.model_plugins import ModelDiagnosticSession
-from edge_delegate.planner import PlannerContext
+from edge_delegate.planner import PlannerContext, PlannerOutputError
 
 MAX_PROFILE_FILE_BYTES = 1024 * 1024
 MAX_RAW_OUTPUT_CHARS = 64 * 1024
@@ -105,12 +105,14 @@ class QueryClient:
     def query(self, text: str, *, include_raw_output: bool = True) -> dict[str, object]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("query text must not be empty")
-        self._query_count += 1
-        request = PlanningRequest(
-            request_id=f"client-query-{self._query_count:04d}",
-            text=text.strip(),
-            locale=self._locale,
+        request = PlanningRequest.from_dict(
+            {
+                "request_id": f"client-query-{self._query_count + 1:04d}",
+                "text": text,
+                "locale": self._locale,
+            }
         )
+        self._query_count += 1
         context = PlannerContext(
             capabilities=self._profile.capabilities,
             state=self._profile.state,
@@ -133,6 +135,8 @@ class QueryClient:
         }
         try:
             plan = self._session.planner.plan(request, context)
+            if not isinstance(plan, PlanIR):
+                raise PlannerOutputError("planner did not return typed Plan IR")
         except Exception as exc:
             generation = self._generation(include_raw_output=include_raw_output)
             return {

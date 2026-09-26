@@ -3,6 +3,7 @@
 from .api import (
     MODEL_PLUGIN_API_VERSION,
     MODEL_PLUGIN_ENTRY_POINT_GROUP,
+    ArtifactContract,
     InferenceEngine,
     InferenceModelPlugin,
     ModelDiagnosticSession,
@@ -30,6 +31,7 @@ __all__ = [
     "ARTIFACT_SCHEMA_VERSION",
     "MODEL_PLUGIN_API_VERSION",
     "MODEL_PLUGIN_ENTRY_POINT_GROUP",
+    "ArtifactContract",
     "ComputeRequest",
     "ComputeTelemetry",
     "GpuInventory",

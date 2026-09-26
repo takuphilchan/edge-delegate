@@ -254,8 +254,8 @@ edge-delegate-lab plan \
 
 The command prints selected capabilities, raw generation telemetry, parsed Plan IR, request-ID
 binding, and deterministic validation issues. Exit code `0` means the proposal parsed and passed
-validation, `2` means the model produced an invalid proposal, and `1` means setup or inference
-failed.
+validation, `2` means the query did not produce a valid proposal (including a reported inference
+failure), and `1` means setup or input validation failed.
 
 Keep the model loaded for several queries:
 
@@ -277,6 +277,17 @@ Interactive commands:
 
 Use `--plugin-settings configs/local/strict-artifact-settings.json` when you want missing artifact
 manifests to fail closed. `--omit-raw-output` starts either client with raw output hidden.
+
+Query text is limited to 8,000 characters and locale to 35 characters. The client checks those
+limits before selecting capabilities or asking the model to generate. The complete tokenized
+prompt plus `--max-new-tokens` must also fit the model/artifact context budget. Characters and
+tokens are different limits: a short query can still exceed the token budget when its profile
+contains many capability cards.
+
+The interactive client reports invalid input and accepts the next query without reloading the
+model. A plugin returning text, a dictionary, or `None` instead of typed Plan IR produces a
+structured `PlannerOutputError`; it does not terminate the session. Model doctor also records
+that failure and continues to the next case. Neither tool executes the proposed actions.
 
 The two-step smoke adapter is expected to fail most queries; use it to verify loading and error
 reporting, not model quality. Do not type angle-bracket placeholders such as `<run>` into Bash:
@@ -320,6 +331,8 @@ python -m pip check
 | Model load says license/access failed | Hugging Face account has not accepted the gated model terms or the WSL environment is not authenticated. | Accept the license, run `hf auth login`, then the small `hf download` access check. |
 | `training output directory is not empty` | Run isolation guard prevented mixed checkpoints. | Use a new run name/output directory in an ignored local config. |
 | `SFT examples exceed max_length` | At least one label would be silently cut off. | Increase the declared context limit if hardware/model allow it, or deliberately reduce prompt content; do not bypass the check. |
+| `context budget exceeded` | Prompt tokens plus reserved output tokens exceed the inference context limit. | Shorten the query, reduce retrieved capabilities, or lower `--max-new-tokens`; do not raise the artifact limit without validating that model configuration. |
+| `artifact manifest omits required ... file hashes` | A plugin-required file is not covered by the manifest. | Restore the complete artifact/manifest from the training run; do not remove more hashes to bypass verification. |
 | `unsupported FunctionGemma chat template` | Upstream template changed, so the loss-mask anchors may no longer be safe. | Review the new template, then update and test the marker logic before training. |
 | TRL warns that an end token is outside the assistant mask | TRL's generic probe uses ordinary assistant text, while this dataset targets tool calls. | Require the preflight `assistant_loss_mask` checks to pass for every record; do not ignore an empty or incomplete mask. |
 | CUDA is unavailable | PyTorch cannot use the NVIDIA GPU in the active WSL environment. | Recheck `torch.cuda.is_available()`, WSL driver visibility, and the activated environment. |

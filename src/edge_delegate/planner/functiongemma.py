@@ -91,7 +91,15 @@ class TransformersFunctionGemmaBackend:
         device_map: str = "auto",
         dtype: str = "auto",
         revision: str | None = None,
+        max_context_tokens: int = 2048,
     ) -> None:
+        if (
+            not isinstance(max_context_tokens, int)
+            or isinstance(max_context_tokens, bool)
+            or max_context_tokens < 1
+        ):
+            raise ValueError("max_context_tokens must be a positive integer")
+        self._max_context_tokens = max_context_tokens
         try:
             import psutil
             import torch
@@ -138,6 +146,9 @@ class TransformersFunctionGemmaBackend:
         footprint_getter = getattr(self._model, "get_memory_footprint", None)
         footprint = None if footprint_getter is None else int(footprint_getter())
         config = getattr(self._model, "config", None)
+        model_context = getattr(config, "max_position_embeddings", None)
+        if isinstance(model_context, int) and model_context > 0:
+            self._max_context_tokens = min(self._max_context_tokens, model_context)
         revision = None if config is None else getattr(config, "_commit_hash", None)
         model_device = str(getattr(self._model, "device", "unknown"))
         self._model_info = ModelDiagnostics(
@@ -175,6 +186,12 @@ class TransformersFunctionGemmaBackend:
         max_new_tokens: int,
     ) -> str:
         self._last_generation = None
+        if (
+            not isinstance(max_new_tokens, int)
+            or isinstance(max_new_tokens, bool)
+            or max_new_tokens < 1
+        ):
+            raise ValueError("max_new_tokens must be a positive integer")
         encoded = self._processor.apply_chat_template(
             list(messages),
             tools=list(tools),
@@ -182,6 +199,13 @@ class TransformersFunctionGemmaBackend:
             return_dict=True,
             return_tensors="pt",
         )
+        prompt_length = int(encoded["input_ids"].shape[-1])
+        if prompt_length + max_new_tokens > self._max_context_tokens:
+            raise PlannerError(
+                f"context budget exceeded: {prompt_length} prompt tokens + "
+                f"{max_new_tokens} reserved output tokens > {self._max_context_tokens}; "
+                "shorten the query, reduce retrieved capabilities, or lower max_new_tokens"
+            )
         model_device = getattr(self._model, "device", None)
         if model_device is not None:
             encoded = encoded.to(model_device)
@@ -200,7 +224,6 @@ class TransformersFunctionGemmaBackend:
         if gpu_available:
             self._torch.cuda.synchronize()
         latency_ms = (time.perf_counter() - generation_started) * 1000
-        prompt_length = encoded["input_ids"].shape[-1]
         generated_tokens = generated[0][prompt_length:]
         raw_output = self._processor.decode(
             generated_tokens,

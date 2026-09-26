@@ -64,8 +64,10 @@ in the CLI yet.
 
 For the built-in FunctionGemma plugin, construction may load a base model and optional Low-Rank
 Adaptation (LoRA) adapter. If the adapter has `edge-delegate-artifact.json`, the plugin verifies
-its model ID, revision, protocol, plugin version, tokenizer files, and adapter files before
-returning a planner.
+its plugin API, exact protocol/schema compatibility, required file coverage, and tokenizer/adapter
+file hashes before returning a planner. It pins the recorded base-model revision and rejects an
+explicit conflicting model ID. Plugin package versions are recorded but need not match exactly
+when the artifact contract remains compatible.
 
 ## The actual request path
 
@@ -115,6 +117,10 @@ of the exact plan, capability set, policy, and state snapshot. Before invoking a
 executor checks the active capability/policy binding and validates again against a fresh device
 snapshot. Only then can it call `DeviceGateway.invoke`.
 
+For each step, the executor checks the resolved arguments before invocation and validates the
+returned value before caching or passing it to another step. Cached results go through the same
+output checks. Device adapters do not get to bypass these checks by omitting simulator validation.
+
 ## What happens inside the FunctionGemma planner
 
 The coordinator does not know any of these model-specific details:
@@ -132,6 +138,9 @@ flowchart LR
 
 Best Matching 25 (BM25) selection reduces prompt size; it does not grant access. The validator
 checks every proposed capability against the complete active capability set and policy.
+
+Before generation, the backend checks the tokenized prompt plus the reserved output against
+the effective context limit. It rejects an oversized prompt instead of truncating it.
 
 The model receives only the synthetic `submit_plan(plan_json)` tool. It does not receive the
 real sensor and actuator functions. Requiring one complete plan lets deterministic code inspect

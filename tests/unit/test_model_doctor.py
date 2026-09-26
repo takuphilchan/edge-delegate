@@ -80,3 +80,29 @@ def test_model_doctor_accepts_a_model_neutral_diagnostic_session() -> None:
 
     assert report["model"] == {"model_id": "generic-test-model"}
     assert report["quality_smoke"]["exact_plan_accuracy"] == 1.0
+
+
+def test_model_doctor_reports_untyped_plugin_output_and_continues():
+    records = select_controlled_records(generate_records())[:2]
+
+    class RecoveringPlanner:
+        def __init__(self):
+            self.calls = 0
+
+        def plan(self, request, context):
+            self.calls += 1
+            if self.calls == 1:
+                return "not typed Plan IR"
+            return PlanIR.from_dict(records[1]["expected_plan"])
+
+    session = FunctionGemmaDiagnosticSession(
+        backend=ScriptedFunctionGemmaBackend([]),
+        planner=RecoveringPlanner(),
+        retrieval_limit=8,
+    )
+    report = ModelDoctor(session).run(records)
+    assert report["operational"]["case_count"] == 2
+    assert report["cases"][0]["parse_valid"] is False
+    assert "PlannerOutputError" in report["cases"][0]["error"]
+    assert report["cases"][0]["failure_category"] == "invalid_plan_ir"
+    assert report["cases"][1]["exact_plan"] is True

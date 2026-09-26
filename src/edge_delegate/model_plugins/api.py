@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol, runtime_checkable
 
 from edge_delegate.contracts import CapabilityCard, DeviceState, PlanIR, PlanningRequest, Policy
@@ -25,12 +25,39 @@ def _identifier(value: str, name: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtifactContract:
+    """One artifact layout and protocol/schema combination a plugin can load."""
+
+    plan_protocol_id: str
+    plan_protocol_version: str
+    plan_schema: str
+    adapter_method: str
+    adapter_format: str
+    required_adapter_files: tuple[str, ...]
+    required_tokenizer_files: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _identifier(self.plan_protocol_id, "plan_protocol_id")
+        for name in ("plan_protocol_version", "plan_schema", "adapter_method", "adapter_format"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"{name} must not be empty")
+        for names in (self.required_adapter_files, self.required_tokenizer_files):
+            if not names:
+                raise ValueError("artifact contracts must declare required files")
+            for name in names:
+                path = PurePosixPath(name)
+                if path.is_absolute() or ".." in path.parts or name in {"", "."}:
+                    raise ValueError("artifact contract files must use safe relative paths")
+
+
+@dataclass(frozen=True, slots=True)
 class ModelPluginDescriptor:
     plugin_id: str
     package_version: str
     display_name: str
     supported_protocols: tuple[str, ...]
     api_version: str = MODEL_PLUGIN_API_VERSION
+    artifact_contracts: tuple[ArtifactContract, ...] = ()
 
     def __post_init__(self) -> None:
         _identifier(self.plugin_id, "plugin_id")
@@ -42,6 +69,9 @@ class ModelPluginDescriptor:
             raise ValueError("a model plugin must support at least one plan protocol")
         for protocol in self.supported_protocols:
             _identifier(protocol, "supported protocol")
+        for contract in self.artifact_contracts:
+            if contract.plan_protocol_id not in self.supported_protocols:
+                raise ValueError("artifact contract must use a supported protocol")
 
 
 @dataclass(frozen=True, slots=True)
