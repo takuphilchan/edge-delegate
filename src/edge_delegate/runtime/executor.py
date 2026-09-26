@@ -8,7 +8,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from edge_delegate.contracts import Route, StepReference
+from edge_delegate.contracts import CapabilityCard, Route, StepReference
+from edge_delegate.contracts._validation import json_value
 from edge_delegate.contracts.policy import Policy
 from edge_delegate.contracts.state import JsonValue
 from edge_delegate.ir import ValidatedPlan, check_plan
@@ -55,6 +56,29 @@ def _invocation_fingerprint(capability_id: str, arguments: Mapping[str, JsonValu
         allow_nan=False,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _checked_arguments(card: CapabilityCard, arguments: Mapping[str, JsonValue]) -> dict:
+    unknown = set(arguments) - set(card.arguments)
+    missing = {name for name, spec in card.arguments.items() if spec.required} - set(arguments)
+    if unknown or missing:
+        raise CapabilityExecutionError("resolved arguments do not match capability parameters")
+    checked = json_value(arguments, "$.arguments")
+    for name, value in checked.items():
+        if not card.arguments[name].matches(value):
+            raise CapabilityExecutionError(
+                f"resolved argument violates capability contract: {name}"
+            )
+    return checked
+
+
+def _checked_result(card: CapabilityCard, result: object) -> JsonValue:
+    checked = json_value(result, "$.result")
+    if (card.result is None and checked is not None) or (
+        card.result is not None and not card.result.matches(checked)
+    ):
+        raise CapabilityExecutionError("device result violates capability contract")
+    return checked
 
 
 class Executor:
@@ -114,32 +138,37 @@ class Executor:
 
         outputs: dict[str, JsonValue] = {}
         records: list[StepExecution] = []
+        cards = {card.capability_id: card for card in device.capability_cards}
         for step in plan.steps:
-            arguments = {
-                name: outputs[value.step_id] if isinstance(value, StepReference) else value
-                for name, value in step.arguments.items()
-            }
-            fingerprint = _invocation_fingerprint(step.capability_id, arguments)
             scoped_key = (
                 None
                 if step.idempotency_key is None
                 else f"{step.capability_id}:{step.idempotency_key}"
             )
             try:
+                card = cards[step.capability_id]
+                arguments = _checked_arguments(
+                    card,
+                    {
+                        name: outputs[value.step_id] if isinstance(value, StepReference) else value
+                        for name, value in step.arguments.items()
+                    },
+                )
+                fingerprint = _invocation_fingerprint(step.capability_id, arguments)
                 cached = (
                     None
                     if scoped_key is None
                     else self._idempotency.lookup(scoped_key, fingerprint)
                 )
                 if cached is not None:
-                    result = cached.result
+                    result = _checked_result(card, cached.result)
                     status = StepStatus.REPLAYED
                 else:
-                    result = device.invoke(step.capability_id, arguments)
+                    result = _checked_result(card, device.invoke(step.capability_id, arguments))
                     status = StepStatus.SUCCEEDED
                     if scoped_key is not None:
                         self._idempotency.record(scoped_key, fingerprint, result)
-            except (CapabilityExecutionError, IdempotencyConflict, KeyError) as exc:
+            except (CapabilityExecutionError, IdempotencyConflict, KeyError, ValueError) as exc:
                 records.append(
                     StepExecution(
                         step_id=step.step_id,

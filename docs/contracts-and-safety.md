@@ -101,6 +101,8 @@ Validation is layered so an early parsing success cannot be mistaken for an exec
 | Side effects | Write/physical idempotency requirements | Static rejection. |
 | Execution binding | Exact plan, capability-set, and policy fingerprints still match | Executor stops before invocation. |
 | Fresh execution preflight | A new device snapshot still passes the deterministic checks | Executor returns a failed execution without invoking a step. |
+| Resolved step inputs | Actual reference values satisfy destination types, ranges, and enums | Executor stops before invoking that step. |
+| Device and cached outputs | JSON-compatible finite values satisfy the declared result contract | Failed execution; later steps are not attempted and invalid results are not recorded. |
 
 Only `validate_plan(...)` can issue a `ValidatedPlan`; callers cannot construct one directly. The
 object records fingerprints for the exact plan, capability set, policy, and state used during
@@ -119,11 +121,18 @@ Changing a step, argument, order, or idempotency key changes the plan fingerprin
 The v0 executor is sequential:
 
 1. Resolve references from prior successful step outputs.
-2. Fingerprint the capability ID and resolved arguments.
-3. Look up the capability-scoped idempotency key.
-4. Replay an identical recorded result, reject conflicting reuse, or invoke the capability.
-5. Validate/inherit the simulator's typed result and continue.
-6. Stop at the first failure; later steps are not attempted.
+2. Validate and copy the resolved arguments, including the destination's range and enum constraints.
+3. Fingerprint the capability ID and resolved arguments, then look up the capability-scoped idempotency key.
+4. Obtain the recorded result, reject conflicting reuse, or invoke the capability.
+5. Validate and copy the result before using it: it must be finite JSON data matching the capability's declared result. A capability with no result may return only `None` (JSON `null`). This check also applies to replayed results.
+6. Record only validated new results, then make the result available to later steps.
+7. Stop at the first failure; later steps are not attempted.
+
+These checks belong to the executor and apply to every `DeviceGateway`, not just the simulator.
+For example, a sensor returning text where it promised a number cannot pass that value to a
+display. A valid number outside the display's permitted range is also rejected before the
+display is invoked. An output-validation failure cannot undo a physical action that already
+happened; it is not evidence that retrying that action is safe.
 
 The in-memory stores make these rules testable. Production hardware will require persistent stores, timeouts/cancellation, and explicit partial-failure handling.
 
