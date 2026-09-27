@@ -90,9 +90,12 @@ def _validate_sft_record(record: dict[str, object], *, location: str) -> None:
         raise ValueError(f"{location} identifiers and expected_route must be non-empty strings")
     messages = record["messages"]
     tools = record["tools"]
+    from edge_delegate.model_plugins.functiongemma_tasks import TASK_TOOL
+
+    compact = tools == [TASK_TOOL]
     if not isinstance(messages, list) or len(messages) < 3:
         raise ValueError(f"{location}.messages must contain developer, user, and assistant turns")
-    if not isinstance(tools, list) or tools != [SUBMIT_PLAN_TOOL]:
+    if not isinstance(tools, list) or (tools != [SUBMIT_PLAN_TOOL] and not compact):
         raise ValueError(f"{location}.tools must contain exactly the versioned submit_plan tool")
     roles = [message.get("role") if isinstance(message, dict) else None for message in messages]
     if roles[:2] != ["developer", "user"] or roles[-1] != "assistant":
@@ -103,6 +106,16 @@ def _validate_sft_record(record: dict[str, object], *, location: str) -> None:
         raise ValueError(f"{location} assistant must contain exactly one tool call")
     call = tool_calls[0]
     function = call.get("function") if isinstance(call, dict) else None
+    if compact:
+        from edge_delegate.planner.tasks import TaskDecision
+
+        if not isinstance(function, dict) or function.get("name") != "select_task":
+            raise ValueError("compact assistant must call select_task")
+        arguments = function.get("arguments")
+        if not isinstance(arguments, dict) or set(arguments) != {"decision_json"}:
+            raise ValueError("compact call requires decision_json only")
+        TaskDecision.from_dict(json.loads(arguments["decision_json"]))
+        return
     if not isinstance(function, dict) or function.get("name") != "submit_plan":
         raise ValueError(f"{location} assistant must call submit_plan")
     arguments = function.get("arguments")

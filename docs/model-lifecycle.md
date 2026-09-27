@@ -7,6 +7,11 @@ behavior. For runtime authorization, read [Contracts and safety](contracts-and-s
 plugin interface and artifact checks, read
 [Model plugins, artifacts, and compute](model-plugins-and-compute.md).
 
+For the next data iteration, review the [dataset-v2 draft](../specs/dataset-v2.md). Its labeling,
+independent expected-effect rules, and review gates are proposed, not implemented. The current
+v1 generator derives expected effects using the same coordinator evaluated later; passing those
+checks establishes internal consistency, not independently verified correctness.
+
 ## Purpose
 
 The model lifecycle exists to improve proposal quality while preserving the runtime boundary. Training output is never executed directly. The selected adapter is loaded by the same planner backend and evaluated through the same strict parser and validator used by the unmodified base model.
@@ -14,11 +19,13 @@ The model lifecycle exists to improve proposal quality while preserving the runt
 ## In plain language
 
 1. We write small, reviewable examples of requests and correct plans.
-2. The simulator proves that those plans are valid and produce the expected outcome.
+2. The simulator checks plan validity and effects against recorded expectations. This does not
+   prove those expectations match human intent or independently establish device correctness.
 3. Related examples are kept together so nearly identical wording cannot leak from training into evaluation.
 4. Preflight checks the files and confirms that the tokenizer will not cut off the correct answers.
-5. Supervised fine-tuning teaches a small adapter to produce the correct `submit_plan` call.
-6. The best checkpoint is loaded back into the ordinary planner and judged by strict plan checks.
+5. A model-specific trainer learns either full plans, compact task decisions, or classifier labels.
+6. Bounded-task checkpoints are selected on validation task outcomes, then tested once against
+   the frozen test set. A valid plan alone does not prove the requested task was completed.
 
 Supervised fine-tuning (SFT) means learning from known input/output examples. Low-Rank Adaptation (LoRA) means training a small adapter while leaving the original base-model weights frozen. Parameter-Efficient Fine-Tuning (PEFT) is the framework used to attach and load that adapter.
 
@@ -30,7 +37,7 @@ flowchart TD
     World --> Gold[Explicit Plan IR + expected coordinator outcome]
     Gold --> Validate[Static validation + simulator execution]
     Validate --> Records[Versioned records + content fingerprints]
-    Records --> GroupSplit[Group split by template, paraphrase cluster, device family]
+    Records --> GroupSplit[Group split by template, paraphrase cluster, scenario group]
     GroupSplit --> TrainSplit[train]
     GroupSplit --> ValidationSplit[validation]
     GroupSplit --> TestSplit[test]
@@ -197,6 +204,11 @@ typed device profile, show the raw and parsed result, run deterministic static v
 never execute the proposal. `interactive` keeps one model session loaded across queries so manual
 testing does not pay model load time repeatedly. These clients do not calculate accuracy because
 an arbitrary query has no gold plan.
+
+`simulate` goes one step further: it connects the selected planner to the actual coordinator and
+executor, using an explicit local-display simulator. It shows before/after state and rejection
+issues. That proves integration and observed effects, not intent correctness; arbitrary requests
+still have no gold answer. The [testing walkthrough](try-it.md) distinguishes these test levels.
 
 The model doctor selects one controlled record per route and never executes a proposed
 capability. It separates:

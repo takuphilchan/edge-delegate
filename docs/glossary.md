@@ -6,6 +6,12 @@ Use this page whenever a term in the code, configuration, reports, or documentat
 
 ## Acronyms
 
+For the gateway preview: a **task decision** selects a supported operation; the **task catalog**
+contains trusted code that builds its steps. The **operation journal** records work before it
+is dispatched. **Reconciliation** asks the device what happened to an earlier operation.
+An **unknown outcome** means the action may have happened; it is not permission to retry.
+**P95 latency** is the time at or below which 95% of measured requests completed.
+
 | Acronym | Full term | Meaning in Edge Delegate |
 | --- | --- | --- |
 | API | Application Programming Interface | A defined way for software components to communicate. Future hardware and external-model integrations will sit behind APIs. |
@@ -66,10 +72,11 @@ Use this page whenever a term in the code, configuration, reports, or documentat
 | Gold plan | A known correct plan authored by project rules and verified through the deterministic validator/simulator, not copied from model output. |
 | Gradient accumulation | Combining gradients from several small training steps before updating weights. It creates a larger effective batch without requiring all examples to fit in GPU memory together. |
 | Handoff | A bounded package of redacted context and questions that may eventually be sent to an external model. The contract exists; the connector does not. |
+| Harness | Test tooling that supplies inputs, runs a component, and records or checks outcomes. The lab contains model/evaluation harnesses; the reusable runtime is not just a harness. |
 | Hardware adapter | Code that implements declared capabilities against real sensors and actuators while preserving the same typed runtime boundary used by the simulator. |
 | Host lab | The `edge_delegate_lab` package and CLI used on a development machine for data generation, plugin inspection, training, artifact verification, and evaluation. It is not imported by the runtime. |
 | Hyperparameter | A training setting chosen before or around a run, such as learning rate, adapter rank, batch size, or epoch count. |
-| Idempotency key | A caller-provided key that makes retrying the same write safe. Reusing it with identical input replays the saved result; reusing it with different input is rejected. |
+| Idempotency key | A key used to detect repeated calls. An identical input with a recorded successful result replays that result; conflicting reuse is rejected. The current in-memory implementation does not guarantee safety after a crash, partial physical failure, or concurrent calls. |
 | Inference | Running a trained model to generate an output. It changes no model weights. |
 | Learning rate | The size of optimizer updates during training. Too large can destabilize learning; too small may make the run ineffective. |
 | Loss mask | A token-level selector telling training which output tokens should contribute to the error calculation. Here it selects only the assistant's tool call. |

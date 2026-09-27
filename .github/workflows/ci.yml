@@ -31,3 +31,7 @@ jobs:
         run: ruff check .
       - name: Test
         run: python -m pytest
+      - name: Build installable packages
+        run: python -m pip wheel --no-deps . ./examples/plugins/counter --wheel-dir dist
+      - name: Verify installed wheels outside the checkout
+        run: python scripts/check_wheel.py --wheel dist/edge_delegate-*.whl --extension-wheel dist/edge_delegate_counter_example-*.whl

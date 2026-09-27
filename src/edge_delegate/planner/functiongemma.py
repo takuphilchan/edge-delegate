@@ -47,6 +47,8 @@ class ModelDiagnostics:
     peak_gpu_memory_bytes: int | None
     torch_version: str
     transformers_version: str
+    adapter_merged: bool = False
+    compiled_decode: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -61,6 +63,9 @@ class GenerationDiagnostics:
     cpu_rss_before_bytes: int
     cpu_rss_after_bytes: int
     peak_gpu_memory_bytes: int | None
+    preprocessing_ms: float | None = None
+    decoding_ms: float | None = None
+    preprocessing_breakdown_ms: dict[str, float] | None = None
 
     def to_dict(self, *, include_raw_output: bool = True) -> dict[str, object]:
         result = asdict(self)
@@ -92,6 +97,10 @@ class TransformersFunctionGemmaBackend:
         dtype: str = "auto",
         revision: str | None = None,
         max_context_tokens: int = 2048,
+        stop_on_tool_end: bool = False,
+        cpu_threads: int | None = None,
+        merge_adapter: bool = False,
+        compile_decode: bool = False,
     ) -> None:
         if (
             not isinstance(max_context_tokens, int)
@@ -100,6 +109,12 @@ class TransformersFunctionGemmaBackend:
         ):
             raise ValueError("max_context_tokens must be a positive integer")
         self._max_context_tokens = max_context_tokens
+        self._stop_on_tool_end = stop_on_tool_end
+        if type(merge_adapter) is not bool or type(compile_decode) is not bool:
+            raise ValueError("merge_adapter and compile_decode must be booleans")
+        if compile_decode and adapter_path is not None and not merge_adapter:
+            raise ValueError("compiled decoding with a LoRA adapter requires merge_adapter")
+        self._generation_options = {}
         try:
             import psutil
             import torch
@@ -111,6 +126,10 @@ class TransformersFunctionGemmaBackend:
                 "python -m pip install -e '.[inference]'"
             ) from exc
         self._torch = torch
+        if cpu_threads is not None:
+            if type(cpu_threads) is not int or not 1 <= cpu_threads <= 64:
+                raise ValueError("cpu_threads must be 1..64")
+            torch.set_num_threads(cpu_threads)
         self._psutil = psutil
         self._last_generation: GenerationDiagnostics | None = None
         process = psutil.Process()
@@ -132,11 +151,25 @@ class TransformersFunctionGemmaBackend:
                 from peft import PeftModel
 
                 self._model = PeftModel.from_pretrained(self._model, adapter_path)
+                if merge_adapter:
+                    # Changes only this resident model, never the saved candidate.
+                    self._model = self._model.merge_and_unload(safe_merge=True)
+            self._model.eval()
         except Exception as exc:
             raise PlannerError(
                 f"could not load {model_id!r} with adapter {adapter_path!r}; confirm "
                 "Hugging Face access, license acceptance, and adapter compatibility"
             ) from exc
+        if compile_decode:
+            if str(self._model.device).split(":")[0] != "cuda":
+                raise PlannerError("compiled decoding currently requires a CUDA-resident model")
+            from transformers.generation.configuration_utils import CompileConfig
+
+            self._generation_options = {
+                "cache_implementation": "static",
+                "max_cache_len": max_context_tokens,
+                "compile_config": CompileConfig(fullgraph=True, mode="reduce-overhead"),
+            }
         if gpu_available:
             torch.cuda.synchronize()
         load_time_ms = (time.perf_counter() - load_started) * 1000
@@ -149,6 +182,10 @@ class TransformersFunctionGemmaBackend:
         model_context = getattr(config, "max_position_embeddings", None)
         if isinstance(model_context, int) and model_context > 0:
             self._max_context_tokens = min(self._max_context_tokens, model_context)
+        if compile_decode:
+            # Keep decode shapes stable across request lengths instead of recompiling
+            # a different static cache for each prompt/output-length combination.
+            self._generation_options["max_cache_len"] = self._max_context_tokens
         revision = None if config is None else getattr(config, "_commit_hash", None)
         model_device = str(getattr(self._model, "device", "unknown"))
         self._model_info = ModelDiagnostics(
@@ -168,11 +205,55 @@ class TransformersFunctionGemmaBackend:
             ),
             torch_version=torch.__version__,
             transformers_version=transformers.__version__,
+            adapter_merged=merge_adapter and adapter_path is not None,
+            compiled_decode=compile_decode,
         )
 
     @property
     def model_info(self) -> ModelDiagnostics:
         return self._model_info
+
+    def generate_batch(self, conversations, tools, *, max_new_tokens, batch_size=8):
+        """Offline quality evaluation only; not a single-request latency measurement."""
+        tokenizer = getattr(self._processor, "tokenizer", self._processor)
+        original_padding = tokenizer.padding_side
+        outputs = []
+        try:
+            tokenizer.padding_side = "left"
+            for start in range(0, len(conversations), batch_size):
+                encoded = self._processor.apply_chat_template(
+                    conversations[start : start + batch_size],
+                    tools=list(tools),
+                    add_generation_prompt=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                    padding=True,
+                )
+                length = int(encoded["input_ids"].shape[-1])
+                if length + max_new_tokens > self._max_context_tokens:
+                    raise PlannerError("batched evaluation exceeds context budget")
+                encoded = encoded.to(self._model.device)
+                stop = [tokenizer.eos_token_id]
+                if self._stop_on_tool_end:
+                    tool_end = tokenizer.get_added_vocab().get("<end_function_call>")
+                    if tool_end is None:
+                        raise PlannerError("tokenizer lacks tool-call stop token")
+                    stop.append(tool_end)
+                with self._torch.inference_mode():
+                    generated = self._model.generate(
+                        **encoded,
+                        do_sample=False,
+                        max_new_tokens=max_new_tokens,
+                        pad_token_id=tokenizer.pad_token_id,
+                        eos_token_id=stop,
+                        **self._generation_options,
+                    )
+                outputs.extend(
+                    tokenizer.batch_decode(generated[:, length:], skip_special_tokens=True)
+                )
+        finally:
+            tokenizer.padding_side = original_padding
+        return outputs
 
     @property
     def last_generation(self) -> GenerationDiagnostics | None:
@@ -186,12 +267,14 @@ class TransformersFunctionGemmaBackend:
         max_new_tokens: int,
     ) -> str:
         self._last_generation = None
+        preprocessing_started = time.perf_counter()
         if (
             not isinstance(max_new_tokens, int)
             or isinstance(max_new_tokens, bool)
             or max_new_tokens < 1
         ):
             raise ValueError("max_new_tokens must be a positive integer")
+        tokenization_started = time.perf_counter()
         encoded = self._processor.apply_chat_template(
             list(messages),
             tools=list(tools),
@@ -199,6 +282,7 @@ class TransformersFunctionGemmaBackend:
             return_dict=True,
             return_tensors="pt",
         )
+        tokenization_ms = (time.perf_counter() - tokenization_started) * 1000
         prompt_length = int(encoded["input_ids"].shape[-1])
         if prompt_length + max_new_tokens > self._max_context_tokens:
             raise PlannerError(
@@ -207,23 +291,39 @@ class TransformersFunctionGemmaBackend:
                 "shorten the query, reduce retrieved capabilities, or lower max_new_tokens"
             )
         model_device = getattr(self._model, "device", None)
+        transfer_started = time.perf_counter()
         if model_device is not None:
             encoded = encoded.to(model_device)
+        input_transfer_ms = (time.perf_counter() - transfer_started) * 1000
+        resource_started = time.perf_counter()
         process = self._psutil.Process()
         cpu_before = process.memory_info().rss
         gpu_available = self._torch.cuda.is_available()
         if gpu_available:
             self._torch.cuda.reset_peak_memory_stats()
         generation_started = time.perf_counter()
-        generated = self._model.generate(
-            **encoded,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            pad_token_id=self._processor.eos_token_id,
-        )
+        resource_setup_ms = (generation_started - resource_started) * 1000
+        preprocessing_ms = (generation_started - preprocessing_started) * 1000
+        stop_options = {}
+        if self._stop_on_tool_end:
+            tokenizer = getattr(self._processor, "tokenizer", self._processor)
+            tool_end = tokenizer.get_added_vocab().get("<end_function_call>")
+            if tool_end is None:
+                raise PlannerError("compact task tokenizer lacks end_function_call token")
+            stop_options["eos_token_id"] = [self._processor.eos_token_id, tool_end]
+        with self._torch.inference_mode():
+            generated = self._model.generate(
+                **encoded,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=self._processor.eos_token_id,
+                **stop_options,
+                **self._generation_options,
+            )
         if gpu_available:
             self._torch.cuda.synchronize()
         latency_ms = (time.perf_counter() - generation_started) * 1000
+        decoding_started = time.perf_counter()
         generated_tokens = generated[0][prompt_length:]
         raw_output = self._processor.decode(
             generated_tokens,
@@ -239,6 +339,16 @@ class TransformersFunctionGemmaBackend:
             peak_gpu_memory_bytes=(
                 int(self._torch.cuda.max_memory_allocated()) if gpu_available else None
             ),
+            preprocessing_ms=preprocessing_ms,
+            decoding_ms=(time.perf_counter() - decoding_started) * 1000,
+            preprocessing_breakdown_ms={
+                "tokenization_ms": tokenization_ms,
+                "input_transfer_ms": input_transfer_ms,
+                "resource_setup_ms": resource_setup_ms,
+                "other_ms": max(
+                    0, preprocessing_ms - tokenization_ms - input_transfer_ms - resource_setup_ms
+                ),
+            },
         )
         return raw_output
 

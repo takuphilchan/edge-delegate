@@ -10,7 +10,16 @@ from edge_delegate.cli import build_parser as build_edge_parser
 from edge_delegate_lab.cli import build_parser as build_lab_parser
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-DOCUMENTS = (REPOSITORY_ROOT / "README.md", *sorted((REPOSITORY_ROOT / "docs").glob("*.md")))
+DOCUMENTS = (
+    REPOSITORY_ROOT / "README.md",
+    *sorted((REPOSITORY_ROOT / "docs").glob("*.md")),
+    REPOSITORY_ROOT / "specs" / "dataset-v2.md",
+    REPOSITORY_ROOT / "specs" / "dataset-review-workspace.md",
+    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "README.md",
+    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "POLICY.md",
+    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "OWNER-DECISION.md",
+    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "AUTHOR-AUDIT.md",
+)
 MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]+]\(([^)]+)\)")
 
 

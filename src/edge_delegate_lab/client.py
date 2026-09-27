@@ -2,81 +2,17 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 
-from edge_delegate.contracts import CapabilityCard, DeviceState, PlanIR, PlanningRequest, Policy
+from edge_delegate.contracts import PlanIR, PlanningRequest
 from edge_delegate.ir import check_plan
 from edge_delegate.model_plugins import ModelDiagnosticSession
 from edge_delegate.planner import PlannerContext, PlannerOutputError
 
-MAX_PROFILE_FILE_BYTES = 1024 * 1024
+from .presentation import render_result as render_result
+from .profiles import ClientProfile
+
 MAX_RAW_OUTPUT_CHARS = 64 * 1024
-
-
-def _reject_constant(value: str):
-    raise ValueError(f"non-finite JSON number is not allowed: {value}")
-
-
-def _without_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON object key: {key}")
-        result[key] = value
-    return result
-
-
-def _load_json(path: Path) -> object:
-    try:
-        payload = path.read_bytes()
-    except FileNotFoundError as exc:
-        raise ValueError(f"profile is missing {path.name}: {path}") from exc
-    if len(payload) > MAX_PROFILE_FILE_BYTES:
-        raise ValueError(f"profile file exceeds {MAX_PROFILE_FILE_BYTES} bytes: {path}")
-    return json.loads(
-        payload.decode("utf-8"),
-        object_pairs_hook=_without_duplicates,
-        parse_constant=_reject_constant,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class ClientProfile:
-    """Typed, non-executable context loaded from a profile directory."""
-
-    root: Path
-    capabilities: tuple[CapabilityCard, ...]
-    state: DeviceState
-    policy: Policy
-
-    @classmethod
-    def load(cls, root: Path) -> ClientProfile:
-        resolved = root.resolve()
-        if not resolved.is_dir():
-            raise ValueError(f"profile directory does not exist: {root}")
-        raw_cards = _load_json(resolved / "capabilities.json")
-        if not isinstance(raw_cards, list):
-            raise ValueError("profile capabilities.json must contain a JSON array")
-        return cls(
-            root=resolved,
-            capabilities=tuple(
-                CapabilityCard.from_dict(card, f"$[{index}]")
-                for index, card in enumerate(raw_cards)
-            ),
-            state=DeviceState.from_dict(_load_json(resolved / "state.json")),
-            policy=Policy.from_dict(_load_json(resolved / "policy.json")),
-        )
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "root": str(self.root),
-            "capability_ids": [card.capability_id for card in self.capabilities],
-            "state": self.state.to_dict(),
-            "policy": self.policy.to_dict(),
-        }
 
 
 class QueryClient:
@@ -211,17 +147,17 @@ class QueryClient:
         return result
 
 
-def render_result(result: dict[str, object]) -> str:
-    return json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True)
-
-
 def interactive_help() -> str:
     return "\n".join(
         (
-            "Enter a natural-language request to generate and validate Plan IR.",
+            "Preview only: no device actions or external-model calls.",
+            "Each query is independent; this is not a chat conversation.",
+            "The profile is a saved snapshot, not live device state.",
+            "Enter a request to generate a plan and check it against that profile.",
             "Commands:",
             "  /context       show the active capabilities, state, and policy",
             "  /raw on|off    include or hide raw model output",
+            "  /format text|json    choose readable output or structured details",
             "  /help          show this help",
             "  /quit          exit",
             "Execution is always disabled in this client.",

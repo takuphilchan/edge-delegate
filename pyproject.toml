@@ -7,12 +7,15 @@ name = "edge-delegate"
 version = "0.3.0"
 description = "Model-independent edge request planner and delegation runtime"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
 edge-delegate = "edge_delegate.cli:main"
 edge-delegate-lab = "edge_delegate_lab.cli:main"
+edge-delegate-device = "edge_delegate.simulator.server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -48,7 +51,13 @@ training = [
 ]
 
 [project.entry-points."edge_delegate.model_plugins.v1"]
+bounded-commands = "edge_delegate.model_plugins.bounded_commands:plugin"
 functiongemma = "edge_delegate.model_plugins.functiongemma:plugin"
+functiongemma-tasks = "edge_delegate.model_plugins.functiongemma_tasks:plugin"
+task-classifier = "edge_delegate.model_plugins.task_classifier:plugin"
+
+[project.entry-points."edge_delegate.device_adapters.v1"]
+unix = "edge_delegate.adapters.registry:unix_adapter"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

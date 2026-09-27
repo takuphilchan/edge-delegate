@@ -12,21 +12,17 @@ from edge_delegate import __version__
 from edge_delegate.contracts import (
     CapabilityCard,
     DeviceState,
-    ExecutionBudget,
     PlanIR,
     PlanningRequest,
     PlanStep,
     Policy,
     Route,
     StepReference,
-    ValueKind,
 )
 from edge_delegate.ir import check_plan, parse_plan
 from edge_delegate.planner import StaticPlanner
 from edge_delegate.runtime import Coordinator
-from edge_delegate.simulator import ManualClock, SimulatedWorld
-from edge_delegate.simulator.actuators import register_state_writer
-from edge_delegate.simulator.sensors import register_state_sensor
+from edge_delegate.simulator.examples import local_display
 
 MAX_CONTRACT_BYTES = 1024 * 1024
 
@@ -96,26 +92,7 @@ def _validate_command(args: argparse.Namespace) -> int:
 
 def _demo_command(args: argparse.Namespace) -> int:
     del args
-    world = SimulatedWorld(
-        values={"environment.temperature_c": 24.5, "display.last_value": None},
-        available_memory_bytes=128 * 1024 * 1024,
-        clock=ManualClock(datetime.now(UTC)),
-    )
-    register_state_sensor(
-        world,
-        capability_id="sensor.temperature.read",
-        state_key="environment.temperature_c",
-        result_kind=ValueKind.NUMBER,
-        description="Read the current ambient temperature in Celsius.",
-    )
-    register_state_writer(
-        world,
-        capability_id="display.value.show",
-        state_key="display.last_value",
-        value_kind=ValueKind.NUMBER,
-        description="Show a numeric value on the local display.",
-        permission="display.write",
-    )
+    world, policy = local_display()
     request = PlanningRequest(
         request_id="demo-display-temperature",
         text="Show the current temperature on the local display.",
@@ -133,11 +110,6 @@ def _demo_command(args: argparse.Namespace) -> int:
                 idempotency_key="demo-show-temperature",
             ),
         ),
-    )
-    policy = Policy(
-        policy_id="demo-local-only",
-        granted_permissions=frozenset({"display.write"}),
-        budget=ExecutionBudget(max_steps=4),
     )
     coordinator = Coordinator(
         planner=StaticPlanner({request.request_id: plan}), world=world, policy=policy
@@ -168,6 +140,13 @@ def _demo_command(args: argparse.Namespace) -> int:
     return 0 if result.status.value == "executed" else 1
 
 
+def _pack_check_command(args):
+    from edge_delegate.application.task_pack import inspect_task_pack
+
+    print(json.dumps(inspect_task_pack(args.manifest), indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edge-delegate",
@@ -178,6 +157,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = commands.add_parser("demo", help="run the deterministic local vertical slice")
     demo.set_defaults(handler=_demo_command)
+
+    pack = commands.add_parser("pack-check", help="verify candidate pack integrity, not release approval")
+    pack.add_argument("--manifest", type=Path, required=True)
+    pack.set_defaults(handler=_pack_check_command)
 
     validate = commands.add_parser("validate", help="validate Plan IR without executing it")
     validate.add_argument("--capabilities", required=True, type=Path)

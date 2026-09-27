@@ -15,6 +15,8 @@ class TrainingConfig:
     train_file: Path
     eval_file: Path
     output_dir: Path
+    base_model_revision: str | None = None
+    task_validation_file: str | None = None
     seed: int = 17
     max_length: int = 2048
     epochs: float = 8.0

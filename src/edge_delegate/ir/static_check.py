@@ -316,6 +316,51 @@ def _check_route_invariants(plan: PlanIR, policy: Policy, issue) -> None:
             issue("$.reason_codes", "route_shape", "defer and deny routes require a reason code")
 
 
+def check_execution_step(
+    validated: ValidatedPlan,
+    step_id: str,
+    capabilities: Mapping[str, CapabilityCard] | Iterable[CapabilityCard],
+    state: DeviceState,
+    policy: Policy,
+    *,
+    now: datetime | None = None,
+) -> StaticCheckReport:
+    """Refresh only this step's dynamic guards without changing the authorized plan.
+
+    Keep full-plan fingerprints, reference checks, costs, and structural checks intact.
+    In particular, approvals must still bind to the original full plan, not a sliced plan.
+    """
+    cards = _capability_map(capabilities)
+    binding_error = validated.binding_error(cards, policy)
+    if binding_error:
+        raise ValueError(binding_error)
+    indices = [i for i, step in enumerate(validated.plan.steps) if step.step_id == step_id]
+    if len(indices) != 1:
+        raise ValueError("execution step is not uniquely present in the validated plan")
+    prefix = f"$.steps[{indices[0]}]."
+    report = check_plan(validated.plan, cards, state, policy, now=now)
+    dynamic_step_codes = {
+        "precondition_failed",
+        "approval_required",
+        "network_unavailable",
+        "memory_budget",
+    }
+    return StaticCheckReport(
+        issues=tuple(
+            issue
+            for issue in report.issues
+            if not (
+                issue.code in dynamic_step_codes
+                and issue.path.startswith("$.steps[")
+                and not issue.path.startswith(prefix)
+            )
+        ),
+        total_latency_ms=report.total_latency_ms,
+        total_energy_mj=report.total_energy_mj,
+        peak_memory_bytes=report.peak_memory_bytes,
+    )
+
+
 def validate_plan(
     plan: PlanIR,
     capabilities: Mapping[str, CapabilityCard] | Iterable[CapabilityCard],

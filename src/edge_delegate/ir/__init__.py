@@ -7,6 +7,7 @@ from .static_check import (
     PlanValidationError,
     StaticCheckReport,
     ValidatedPlan,
+    check_execution_step,
     check_plan,
     validate_plan,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "StaticCheckReport",
     "ValidatedPlan",
     "canonicalize_plan",
+    "check_execution_step",
     "check_plan",
     "parse_plan",
     "plan_fingerprint",

@@ -171,7 +171,9 @@ def test_interactive_command_reuses_model_and_controls_raw_output(
     responses = iter(("first request", "/raw off", "second request", "/quit"))
     monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
 
-    exit_code = lab_main(["interactive", "--profile", str(EXAMPLE_PROFILE)])
+    exit_code = lab_main(
+        ["interactive", "--profile", str(EXAMPLE_PROFILE), "--format", "json", "--raw-output"]
+    )
 
     output = capsys.readouterr().out
     assert exit_code == 0
@@ -200,3 +202,69 @@ def test_interactive_invalid_input_does_not_end_or_reload_session(monkeypatch, c
     assert "Invalid query:" in capsys.readouterr().out
     assert len(loads) == 1
     assert [request.text for request in planner.requests] == ["valid request"]
+
+
+def test_interactive_readable_default_and_format_switch(monkeypatch, capsys):
+    client = QueryClient(FakeSession(EchoClarifyPlanner()), ClientProfile.load(EXAMPLE_PROFILE))
+    monkeypatch.setattr("edge_delegate_lab.cli._query_client", lambda args: client)
+    responses = iter(("first query", "/format bad", "/format json", "second query", "/quit"))
+    monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
+    assert lab_main(["interactive", "--profile", str(EXAMPLE_PROFILE)]) == 0
+    output = capsys.readouterr().out
+    assert "Execution: NOT attempted" in output
+    assert "Question: Which display should I use?" in output
+    assert "not a chat conversation" in output
+    assert "usage: /format text|json" in output
+    assert '"schema_version": "edge-delegate-query-result.v1"' in output
+    assert "raw-generation" not in output
+
+
+def test_readable_query_failure_is_not_presented_as_success():
+    from edge_delegate_lab.presentation import render_query
+
+    client = QueryClient(FakeSession(FailingPlanner()), ClientProfile.load(EXAMPLE_PROFILE))
+    text = render_query(client.query("show temperature"))
+    assert "no usable plan" in text
+    assert "Checks: PASSED" not in text
+    assert "Execution: NOT attempted" in text
+
+
+def test_readable_query_escapes_terminal_controls():
+    from edge_delegate_lab.presentation import render_query
+
+    client = QueryClient(
+        FakeSession(EchoClarifyPlanner(), raw_output="\x1b[2Jhidden"),
+        ClientProfile.load(EXAMPLE_PROFILE),
+    )
+    assert "\x1b" not in render_query(client.query("test"))
+
+
+def test_readable_local_plan_explains_step_references(demo_plan):
+    from dataclasses import replace
+
+    from edge_delegate_lab.presentation import render_query
+
+    class LocalPlanner:
+        def plan(self, request, context):
+            return replace(demo_plan, request_id=request.request_id)
+
+    client = QueryClient(FakeSession(LocalPlanner()), ClientProfile.load(EXAMPLE_PROFILE))
+    output = render_query(client.query("Show temperature"))
+    assert "Checks: PASSED" in output
+    assert "value=result of read_temperature" in output
+    assert "Passing checks does not prove the plan matches your intent." in output
+
+
+def test_readable_validation_failure_includes_issue_code(demo_plan):
+    from dataclasses import replace
+
+    from edge_delegate_lab.presentation import render_query
+
+    class InvalidLocalPlanner:
+        def plan(self, request, context):
+            return replace(demo_plan, request_id=request.request_id, steps=())
+
+    client = QueryClient(FakeSession(InvalidLocalPlanner()), ClientProfile.load(EXAMPLE_PROFILE))
+    output = render_query(client.query("Show temperature"))
+    assert "Checks: FAILED" in output
+    assert "Problem [route_shape]" in output

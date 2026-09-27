@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -55,6 +56,7 @@ def train_lora_adapter(
     *,
     compute_capabilities: ModelComputeCapabilities,
     preflight_only: bool = False,
+    plan_protocol_id: str = "functiongemma-submit-plan",
 ) -> dict[str, object]:
     """Preflight and optionally train one plugin-owned LoRA adapter."""
 
@@ -71,7 +73,9 @@ def train_lora_adapter(
 
     train_records = load_sft_records(config.train_file)
     eval_records = load_sft_records(config.eval_file)
-    tokenizer = AutoTokenizer.from_pretrained(config.base_model_id)
+    tokenizer = AutoTokenizer.from_pretrained(
+        config.base_model_id, revision=config.base_model_revision
+    )
     if not isinstance(tokenizer.chat_template, str):
         raise ValueError("base model does not provide a training chat template")
     tokenizer.chat_template = add_assistant_generation_mask(tokenizer.chat_template)
@@ -105,6 +109,15 @@ def train_lora_adapter(
             maximum_vram_fraction=config.maximum_vram_fraction,
         ),
     )
+    if config.per_device_train_batch_size > 1:
+        # An explicit recipe is not an automatic memory-fit claim. CUDA's process
+        # memory cap remains enforced and an OOM fails this run rather than spilling.
+        compute_plan = replace(
+            compute_plan,
+            microbatch_size=config.per_device_train_batch_size,
+            gradient_accumulation_steps=config.gradient_accumulation_steps,
+            selection_source="explicit_recipe_microbatch_under_memory_cap",
+        )
     base_report: dict[str, object] = {
         "schema_version": "edge-delegate-training-run.v1",
         "purpose": config.purpose,
@@ -129,6 +142,7 @@ def train_lora_adapter(
         raise RuntimeError("the selected CUDA GPU does not support BF16 training")
 
     _ensure_fresh_output(config.output_dir)
+    torch.set_num_threads(min(4, torch.get_num_threads()))
     set_seed(config.seed)
     torch.cuda.empty_cache()
     torch.cuda.set_per_process_memory_fraction(compute_plan.maximum_vram_fraction, device=0)
@@ -142,6 +156,7 @@ def train_lora_adapter(
     }[compute_plan.precision]
     model = AutoModelForCausalLM.from_pretrained(
         config.base_model_id,
+        revision=config.base_model_revision,
         dtype=model_dtype,
         device_map="auto",
         attn_implementation=compute_plan.attention_backend,
@@ -173,7 +188,11 @@ def train_lora_adapter(
         logging_first_step=True,
         eval_strategy="epoch",
         save_strategy="epoch",
-        save_total_limit=config.save_total_limit,
+        save_total_limit=(
+            max(config.save_total_limit, math.ceil(config.epochs))
+            if config.task_validation_file
+            else config.save_total_limit
+        ),
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
@@ -224,12 +243,12 @@ def train_lora_adapter(
         adapter_files[name] = _file_sha256(path)
     artifact_manifest = ModelArtifactManifest(
         artifact_id=config.output_dir.name,
-        plugin_id="functiongemma",
+        plugin_id=config.plugin_id,
         plugin_api_version=MODEL_PLUGIN_API_VERSION,
         plugin_package_version=__version__,
         base_model_id=config.base_model_id,
         base_model_revision=model_revision,
-        plan_protocol_id="functiongemma-submit-plan",
+        plan_protocol_id=plan_protocol_id,
         plan_protocol_version="1",
         plan_schema="plan-ir.v0",
         tokenizer_files=tokenizer_files,

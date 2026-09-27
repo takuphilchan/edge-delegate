@@ -1,5 +1,34 @@
 # Development Runbook
 
+New roadmap tooling: `edge-delegate pack-check --manifest PATH` verifies candidate integrity,
+not release readiness. [First-batch instructions](implementation-batch-1.md) cover the public SDK,
+`bash scripts/test-numeric.sh`, review-history submissions/exports and qualification v2.
+
+`bash scripts/test-bounded.sh` tests the separate deterministic command grammar (no weights).
+For the learned-model failure trace, use `bash scripts/test-numeric.sh --include-raw-output`;
+this explicit diagnostic flag saves raw generations for the public development suite.
+
+For `edge-delegate-lab run` and the separate-process device emulator, follow the
+[gateway preview walkthrough](gateway-preview.md). Execution is explicit and experimental.
+Use `edge-delegate-lab benchmark` for persistent-session timing and `edge-delegate-lab qualify`
+to check the combined dataset, quality, and performance evidence without promoting an artifact.
+Use `edge-delegate-lab reconcile --socket SOCKET --journal JOURNAL --request-id REQUEST_ID`
+to check recorded receipts after uncertainty. It loads no model and dispatches no actions.
+See the gateway walkthrough for actual paths, legacy operation-ID recovery, and result meanings.
+Use `edge-delegate-lab init-example --output NEW_DIRECTORY` to create the bundled reference
+profile from installed code; no checkout-relative example files or model weights are needed.
+For one-terminal execution use `edge-delegate-lab run --emulator-dir PRIVATE_LINUX_DIRECTORY`
+with your selected model plugin/artifact. It manages the emulator process and defaults to readable
+output. `/help`, `/reconcile REQUEST_ID`, `/cancel REQUEST_ID`, and `/quit` are available.
+For an externally managed adapter, add `--format text` for readable results; its default stays JSON.
+Use `edge-delegate-lab artifact-export --artifact ARTIFACT_DIRECTORY --output NEW_BUNDLE.zip`
+to produce a manifest-verified candidate archive and its SHA-256. It includes only listed
+adapter/tokenizer files, not training logs, credentials, unrelated files, or base-model weights.
+It does not qualify or publish the candidate. Check upstream redistribution terms before sharing.
+Recipients extract to a fresh directory, run `edge-delegate-lab artifact-verify --artifact DIRECTORY`,
+and obtain any gated base model separately. Use an artifact/version-specific bundle filename;
+existing outputs are never overwritten. Share the printed digest through a trusted channel.
+
 [Documentation home](README.md) | [Glossary](glossary.md)
 
 ## Who this is for
@@ -23,6 +52,9 @@ described in [System architecture](system-architecture.md); it does not redefine
 ## Use the correct shell
 
 Run Python, Hugging Face, CUDA, training, and test commands inside Ubuntu on Windows Subsystem for Linux (WSL):
+
+New users should start with the generic environment setup in [Try Edge Delegate](try-it.md).
+The paths below describe the original developer's existing machine, not installation requirements.
 
 ```bash
 wsl
@@ -237,9 +269,22 @@ No model proposal should be sent to a real actuator during model-quality evaluat
 
 ## Workflow 8: type queries into a saved adapter
 
+For the short guided path and the distinction between a harness check and a model test, use
+[Try Edge Delegate](try-it.md).
+
 The query client needs a profile directory containing `capabilities.json`, `state.json`, and
 `policy.json`. It uses that context to construct the real model prompt and statically validate the
 result. It never invokes a capability.
+
+Inspect those files before loading a model:
+
+```bash
+edge-delegate-lab profile-check --profile examples/local-display
+```
+
+This checks the contracts and duplicate capability IDs, and displays timestamp and permission
+information without loading weights. Exit `0` means the files are valid, not that a plan is
+authorized. Warnings do not change that exit code; setup/contract errors return `1`.
 
 Run one query:
 
@@ -272,11 +317,15 @@ Interactive commands:
 | --- | --- |
 | `/context` | Show the active capability IDs, complete state snapshot, and policy. |
 | `/raw on` or `/raw off` | Include or hide raw model output in later results. |
+| `/format text` or `/format json` | Change how later results are displayed. |
 | `/help` | Show the command summary. |
 | `/quit` | Exit the client and unload the model. |
 
 Use `--plugin-settings configs/local/strict-artifact-settings.json` when you want missing artifact
-manifests to fail closed. `--omit-raw-output` starts either client with raw output hidden.
+manifests to fail closed. Interactive mode defaults to readable text with raw output hidden;
+`plan` retains JSON with raw output included. Use `--format text|json`, `--raw-output`, or
+`--omit-raw-output` to choose explicitly. Every interactive query is independent; the loaded
+profile stays fixed and no conversational history is sent to the model.
 
 Query text is limited to 8,000 characters and locale to 35 characters. The client checks those
 limits before selecting capabilities or asking the model to generate. The complete tokenized
@@ -293,7 +342,25 @@ The two-step smoke adapter is expected to fail most queries; use it to verify lo
 reporting, not model quality. Do not type angle-bracket placeholders such as `<run>` into Bash:
 the shell treats them as file redirection. Assign an actual path to `ADAPTER_DIR` as shown above.
 
-## Workflow 9: software verification
+## Workflow 9: model-driven simulator execution
+
+```bash
+edge-delegate-lab simulate --adapter "$ADAPTER_DIR" \
+  --text "Show the current temperature on the local display."
+```
+
+The selected model creates a proposal, and the actual coordinator/executor validate and execute
+eligible steps against a fresh local-display simulator. This command does not consume arbitrary
+profiles, invoke physical devices, or call an external model. The display starts empty and the
+temperature is `24.5`; the intended two-step result displays that value.
+
+Output includes outcome, validation issues, executed steps, and before/after state. Use
+`--format json` for assertions. Exit `0` means local execution completed, `2` means it did not
+(including valid clarification/denial), and `1` means setup/input failed. Execution success does
+not assess whether the proposed actions correctly interpret the request. Use gold-labelled
+evaluation cases for that measurement.
+
+## Workflow 10: software verification
 
 ```bash
 make verify
@@ -340,6 +407,80 @@ python -m pip check
 | All generations succeeded but quality is zero | The model ran, but its proposals failed parsing or correctness checks. | Inspect raw doctor outputs and failure categories; this is a model/data problem, not proof that the runtime failed. |
 | `invalid choice: interactive` or `invalid choice: plan` | The active editable install predates the query client. | From the repository root, rerun `python -m pip install -e ".[training]"`, then check `edge-delegate-lab --help`. |
 | `external_required` result | The route is valid, but connector execution is intentionally not implemented. | Treat it as an explicit handoff requirement, not a completed external answer. |
+
+## Audit validation before another training run
+
+This command does not train, call external models, or connect to a physical device. It verifies
+that the input matches the validation fingerprint in the adjacent manifest, checks reference
+plans in simulation, and evaluates the selected planner in batch and individual-request modes.
+
+```bash
+HF_HUB_OFFLINE=1 edge-delegate-lab audit-validation \
+  --plugin functiongemma-tasks \
+  --adapter artifacts/training/functiongemma-tasks-v1-r2-b16/selected-adapter \
+  --plugin-settings configs/inference/functiongemma-tasks-compiled.json \
+  --dataset data/generated/tasks-v1-r2/validation.jsonl \
+  --output artifacts/audit/validation-new-run
+```
+
+Use a new output directory. Existing outputs are never overwritten; train/test/safety splits
+are rejected by content fingerprint. Compilation may take time; single-request evaluation runs
+every case individually and reports progress every 50 cases. Do not train concurrently.
+
+Read summary.md first, then audit.json for grouped findings and case IDs. batch.json and
+single.json contain detailed effect/plan fingerprints, routes, and validation codes; reference.json
+checks the expected plans against the simulator. progress.json stays incomplete on interruption.
+The single path uses the same planner.plan interface as the client but saved dataset contexts;
+this is not a gateway latency or physical-device test. A plugin without a batch interface uses
+individual planning in both passes, explicitly recorded in its report.
+
+Automatic categories are observed symptoms, not confirmed causes or independent label review.
+Review wrong-but-permitted cases, malformed decisions, and mode differences before retraining.
+All review statuses remain pending. Reference-plan consistency does not prove human intent labels.
+
+By default, reports omit request text, raw model output, argument values, and exception messages.
+They still contain identifiers and fingerprints: treat them as sensitive local evidence, not
+anonymized data. --include-sensitive adds requests, expected effects/values, and exception messages;
+use only on authorized data. No candidate is promoted by this command. Future benchmark reports
+also retain outcome stages and validation codes, without free-form error messages.
+
+## Check a dataset-v2 review workspace
+
+The read-only review command is implemented. An 80-example exposed pilot draft is available;
+none of its labels are independently approved. Start with the
+[pilot instructions](../data/fixtures/pilot-v2/README.md) and its provisional policy. To create
+a new workspace (never overwrites an existing review):
+
+```bash
+python -m edge_delegate_lab.pilot \
+  --source data/fixtures/pilot-v2/source.json \
+  --output data/review/pilot-v2
+```
+
+Open `data/review/pilot-v2/REVIEW.md` before the proposed answers. See the
+[workspace contract](../specs/dataset-review-workspace.md) for the required files and review
+fields. The following checks require that workspace to exist:
+
+```bash
+# Inspect a partial draft; this cannot approve it for training.
+edge-delegate-lab review-data --directory data/review/pilot-v2 --allow-pending
+
+# Readable progress, including policy integrity and outstanding coverage.
+edge-delegate-lab review-data --directory data/review/pilot-v2 --allow-pending --format text
+
+# Require accepted reviews and minimum pilot coverage.
+edge-delegate-lab review-data --directory data/review/pilot-v2
+```
+
+Both modes reject malformed expectations, fingerprint mismatches, and declared split leakage.
+Success means the selected review checks passed, not that labels are independently proven or the
+model is qualified. No model is loaded, no device is invoked, and no files are changed.
+
+Test this tooling without a dataset or GPU:
+
+```bash
+python -m pytest -q tests/unit/test_dataset_review.py tests/unit/test_decision_diagnostics.py
+```
 
 ## Decision gates before moving forward
 

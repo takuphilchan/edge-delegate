@@ -16,6 +16,7 @@ from edge_delegate.planner.base import Planner, PlannerContext, PlannerOutputErr
 
 from .audit import InMemoryAuditLog
 from .executor import ExecutionResult, ExecutionStatus, Executor
+from .idempotency import IdempotencyConflict
 from .ports import AuditSink, DeviceGateway
 
 
@@ -28,6 +29,8 @@ class CoordinatorStatus(StrEnum):
     INVALID_PLAN = "invalid_plan"
     PLANNER_FAILED = "planner_failed"
     EXECUTION_FAILED = "execution_failed"
+    EXECUTION_UNKNOWN = "execution_unknown"
+    REQUEST_CONFLICT = "request_conflict"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +64,14 @@ class Coordinator:
         return self._audit
 
     def handle(self, request: PlanningRequest) -> CoordinatorResult:
-        state = self._world.snapshot()
+        try:
+            state = self._world.snapshot()
+        except Exception as exc:
+            return CoordinatorResult(
+                request.request_id,
+                CoordinatorStatus.EXECUTION_FAILED,
+                message=f"device snapshot failed: {type(exc).__name__}",
+            )
         context = PlannerContext(
             capabilities=self._world.capability_cards,
             state=state,
@@ -82,7 +92,9 @@ class Coordinator:
             return CoordinatorResult(
                 request_id=request.request_id,
                 status=(
-                    CoordinatorStatus.INVALID_PLAN
+                    CoordinatorStatus.REQUEST_CONFLICT
+                    if isinstance(exc, IdempotencyConflict)
+                    else CoordinatorStatus.INVALID_PLAN
                     if isinstance(exc, PlannerOutputError)
                     else CoordinatorStatus.PLANNER_FAILED
                 ),
@@ -146,10 +158,14 @@ class Coordinator:
                 details={"step_count": len(execution.steps)},
                 timestamp=self._world.clock.now(),
             )
-            if execution.status is ExecutionStatus.FAILED:
+            if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.UNKNOWN}:
                 return CoordinatorResult(
                     request_id=request.request_id,
-                    status=CoordinatorStatus.EXECUTION_FAILED,
+                    status=(
+                        CoordinatorStatus.EXECUTION_UNKNOWN
+                        if execution.status is ExecutionStatus.UNKNOWN
+                        else CoordinatorStatus.EXECUTION_FAILED
+                    ),
                     plan=plan,
                     validation=report,
                     execution=execution,

@@ -27,6 +27,11 @@ FunctionGemma is the first implementation. Shared lab commands call the plugin i
 its tokenizer, prompt format, output parser, data export, and trainer remain isolated in
 FunctionGemma-specific modules.
 
+The bounded-task path adds two explicitly selected plugins: `functiongemma-tasks` uses compact
+tool calls and a LoRA adapter; `task-classifier` uses character n-grams and trained JSON weights.
+Both feed the same trusted task compiler. Their runtime loaders do not import host trainers.
+Training implementations share dataset readers rather than importing CLI handlers.
+
 ## What is shared and what is isolated
 
 | Shared, model-neutral code | Isolated behind a plugin |
@@ -144,6 +149,10 @@ Legacy adapter directories without a manifest are temporarily accepted by the Fu
 plugin for compatibility. New artifacts should always contain the manifest. Set
 `allow_legacy_artifact` to `false` in plugin settings when testing a strict deployment path.
 
+The compact and classifier plugins require manifests. Compact artifacts declare
+`functiongemma-task` version `1`; classifier artifacts declare `bounded-task` version `1` and
+hash both weights and feature metadata. They cannot be loaded as legacy full-plan artifacts.
+
 ## Inference context budget
 
 Before generation, the FunctionGemma backend tokenizes the complete prompt, including the
@@ -158,6 +167,126 @@ budget can still produce an incomplete plan, which the parser rejects. This guar
 context, but does not guarantee that every model configuration fits available GPU memory.
 
 ## Compute selection
+
+### Faster resident inference (experimental)
+
+The compact model can spend most of a request generating its short task decision, even though
+device transport takes only milliseconds. Two opt-in configurations reduce that inference
+overhead without changing the task protocol or bypassing validation:
+
+| Settings file under `configs/inference/` | What changes | Main trade-off |
+| --- | --- | --- |
+| `functiongemma-tasks-merged.json` | Merge the trained LoRA weights into the resident base model | Floating-point rounding can change predictions; evaluate the merged model separately. |
+| `functiongemma-tasks-compiled.json` | Merge, use a fixed-capacity attention cache, and compile decoding | CUDA only; compilation costs startup time and additional memory. |
+
+The saved adapter is never rewritten. Both flags default to `false`, so existing commands keep
+the unmerged path. Compiled decoding with an unmerged adapter is rejected. These are model-plugin
+settings, not branches in the coordinator or device executor. The implementation follows the
+documented [PEFT merge API](https://huggingface.co/docs/peft/en/package_reference/lora) and
+[Transformers static-cache compilation](https://huggingface.co/docs/transformers/main/llm_optims).
+
+Add this flag to the managed `run` command in [gateway usage](gateway-preview.md):
+
+```bash
+--plugin-settings configs/inference/functiongemma-tasks-compiled.json
+```
+
+The gateway loads once, then calls the plugin's optional `WarmableModelSession.warmup()` before
+announcing planner readiness. Warm-up only generates example decisions; it never invokes devices.
+Expect tens of seconds or more on first compilation. Warm requests reuse compiled decoding and
+a cache sized to the context budget, preventing cache resizing for ordinary request-length
+changes. Different batch sizes, software versions, devices, or shapes can still compile again.
+This is not a hard real-time deadline. Other preview/evaluation commands can compile on their
+first generation; their startup behavior is not a gateway readiness guarantee.
+
+Resident inference still uses the original flow: model decision, deterministic task compiler,
+full plan validation, fresh execution checks, durable journal, device acknowledgement. No query
+answer cache or exact-phrase shortcut replaces the model. Do not share a mutable model session
+across concurrent callers without synchronization; the current execution client is sequential.
+
+To reproduce a sequential baseline/candidate comparison on this machine:
+
+```bash
+HF_HUB_OFFLINE=1 python scripts/compare_inference.py \
+  --artifact artifacts/training/functiongemma-tasks-v1-r2-b16/selected-adapter \
+  --candidate-settings configs/inference/functiongemma-tasks-compiled.json \
+  --validation data/generated/tasks-v1-r2/validation.jsonl \
+  --output artifacts/performance/compiled-decode-new-run
+```
+
+Choose a new output directory. The script verifies the canonical validation fingerprint against
+its manifest, evaluates 600 validation cases for this dataset, then measures five warmups and
+200 requests per run across three runs for each configuration. Training must not run concurrently.
+It records settings, source/artifact identity, hardware/software, loading, preparation, generation
+resources, and end-to-end times, retaining errors and abstentions. Evaluation batching is separate
+from single-request timing. The timing workload has only six fixed phrases; it is not a broad
+language benchmark. Existing compiler caches mean startup timing is not a clean-install cold
+start. The script does not train, read frozen test/safety splits, or promote a candidate.
+
+See [qualification status](qualification-status.md) for measurements and remaining quality failures.
+Text-to-emulator timing excludes speech recognition and speech synthesis. Neither a sub-second
+result nor this optimization establishes state-of-the-art performance, CPU/embedded performance,
+or physical-device readiness.
+
+### Versioned numeric policy for bounded tasks
+
+`functiongemma-tasks` and `task-classifier` share the same numeric extraction module. Select
+behavior through the model-neutral `numeric_policy` inference setting:
+
+| Setting | Behavior |
+| --- | --- |
+| Omitted or `legacy.v1` | Preserves the existing extractor, including accepting 1001 and 1.234. Existing artifacts and training recipes keep this default. |
+| `decimal.v1` | One standalone ASCII decimal literal in [-1000, 1000], at most two fractional digits; unsupported forms require clarification when the model selects display_number. |
+
+The strict policy accepts optional `+`/`-`, leading decimal points (`.5`, `-.5`), leading zeros,
+and one trailing sentence mark (`.`, `!`, `?`). Negative zero becomes positive zero. Range and
+precision are checked before conversion to the existing numeric Plan IR type, without rounding
+an invalid literal into range. Scientific notation, separators, multiple literals, malformed
+signs, number words, attached units/currency, Unicode digits/signs, and arithmetic-like tokens
+are not converted. This first strict grammar is deliberately narrow: `Display 12, please` and
+parenthesized literals also clarify; `Display 12. Please.` is accepted. Common number/calculation
+words anywhere in the request are conservatively rejected, even when they are incidental.
+
+This validates a literal **after task selection**. It is not a general arithmetic parser or a
+proof of number-role/intent understanding. A model selecting the wrong task still needs outcome
+evaluation. FunctionGemma's selected numeric value must match the checked literal; mismatch
+remains an invalid proposal, not an automatically repaired action. A temperature read/display
+uses the sensor result and is not governed by the explicit-literal range. Device-specific limits
+still belong in capability/runtime validation.
+
+To test the new policy automatically on the current compiled FunctionGemma candidate:
+
+```bash
+bash scripts/test-latency.sh \
+  --settings configs/inference/functiongemma-tasks-compiled-decimal-v1.json
+```
+
+That script still covers the six familiar smoke requests. Numeric boundary and rejection
+regressions for both plugins, using deterministic model fixtures and the real simulator, run with:
+
+```bash
+python -m pytest -q tests/unit/test_numeric_policy.py
+```
+
+For other model commands use `--plugin-settings configs/inference/numeric-decimal-v1.json`
+with either bounded plugin. The classifier needs its own trained artifact. Do not pass the
+FunctionGemma compile settings to it. The legacy full-plan `functiongemma` plugin does not accept
+this bounded-task setting.
+
+Session model information reports `numeric_policy`; single-request generation diagnostics also
+report `numeric_check` without recording the literal. Reasons distinguish missing/multiple
+literals, unsupported expressions/formats, and out-of-range numbers. The existing task/Plan IR
+wire format remains unchanged: the resulting route is clarify, with its existing generic
+clarification message/reason. New dataset clarification subtypes remain a separate revision.
+
+No artifact files or manifests are rewritten. The version is an **explicit deployment setting**,
+not a claim that weights were retrained for this policy. Preserve the settings beside a deployment
+and supply them again on restart; without them the artifact uses legacy behavior. Existing evidence
+identities include supplied inference settings, so measurements under the two policies are not
+interchangeable. Nothing here approves the draft dataset, enables training on v2, or qualifies a
+model; any future training/selection recipe must explicitly bind and evaluate its numeric policy.
+
+### Training compute
 
 Compute selection has three inputs:
 

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from edge_delegate.contracts import (
+    CapabilityCard,
     Connectivity,
     DeviceState,
     ExecutionBudget,
@@ -238,9 +239,44 @@ def build_world(*, connectivity: Connectivity = Connectivity.OFFLINE) -> Simulat
 
 
 def build_record_world(record: dict[str, object]) -> SimulatedWorld:
-    """Construct the executable v0 simulator fixture declared by a dataset record."""
+    """Construct the declared simulator fixture; never guess for unknown schemas.
+
+    Draft v2 support is for explicit consistency checks, not training eligibility.
+    """
 
     state = DeviceState.from_dict(record["state"])
+    if record.get("schema_version") in {
+        "edge-delegate-dataset.v1",
+        "edge-delegate-dataset.v2-draft",
+    }:
+
+        class RecordWorld(SimulatedWorld):
+            def snapshot(self):
+                return replace(super().snapshot(), observed_at=state.observed_at)
+
+        world = RecordWorld(
+            values=state.values,
+            connectivity=state.connectivity,
+            available_memory_bytes=state.available_memory_bytes,
+            clock=ManualClock(datetime.fromisoformat(record["evaluation_at"])),
+        )
+
+        def read(arguments, device):
+            return device.read("environment.temperature_c")
+
+        def display(arguments, device):
+            device.write("display.last_value", arguments["value"])
+            return True
+
+        handlers = {"sensor.temperature.read": read, "display.value.show": display}
+        for raw in record["capabilities"]:
+            card = CapabilityCard.from_dict(raw)
+            if card.capability_id not in handlers:
+                raise ValueError("dataset declares unsupported reference-device capability")
+            world.register(card, handlers[card.capability_id])
+        return world
+    if record.get("schema_version") != "edge-delegate-dataset.v0":
+        raise ValueError("unsupported simulator dataset record version")
     return build_world(connectivity=state.connectivity)
 
 
@@ -352,6 +388,14 @@ def generate_records() -> list[dict[str, object]]:
                 "policy": policy.to_dict(),
                 "expected_plan": plan.to_dict(),
                 "expected_outcome": expected_status.value,
+                "expected_effects": {
+                    "state": dict(world.snapshot().values),
+                    "final_output": None
+                    if result.execution is None
+                    else result.execution.final_output,
+                    "invocations": [item.capability_id for item in world.invocations],
+                    "forbidden_invocations": ["alarm.enabled.set"],
+                },
                 "metadata": metadata,
             }
             record["content_sha256"] = content_fingerprint(record)
@@ -388,9 +432,7 @@ def write_dataset(
         "dataset_version": DATASET_VERSION,
         "generator_version": GENERATOR_VERSION,
         "seed": seed,
-        "license": (
-            "UNLICENSED pending repository license selection; scenario text is project-authored"
-        ),
+        "license": "MIT; scenario text is project-authored; model licenses are separate",
         "label_source": "deterministic contracts and simulator; no model-generated gold labels",
         "split_policy": (
             "group by template_id, paraphrase_cluster, and device_family; isolate safety tags"

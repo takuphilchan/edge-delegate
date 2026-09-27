@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 
 from edge_delegate.contracts import (
     CapabilityCard,
@@ -33,7 +34,7 @@ def validate_record(record: dict[str, object]) -> None:
     missing = required - record.keys()
     if missing:
         raise ValueError(f"dataset record missing fields: {', '.join(sorted(missing))}")
-    if record["schema_version"] != "edge-delegate-dataset.v0":
+    if record["schema_version"] not in {"edge-delegate-dataset.v0", "edge-delegate-dataset.v1"}:
         raise ValueError("unsupported dataset record version")
     request = PlanningRequest.from_dict(record["request"])
     plan = PlanIR.from_dict(record["expected_plan"])
@@ -47,7 +48,10 @@ def validate_record(record: dict[str, object]) -> None:
         Route.DEFER: "deferred",
         Route.DENY: "denied",
     }[plan.route]
-    if record["expected_outcome"] != expected_outcome:
+    if record["expected_outcome"] != expected_outcome and not (
+        record["schema_version"] == "edge-delegate-dataset.v1"
+        and record["expected_outcome"] == "invalid_plan"
+    ):
         raise ValueError("expected outcome is inconsistent with the expected route")
     raw_cards = record["capabilities"]
     if not isinstance(raw_cards, list):
@@ -58,9 +62,23 @@ def validate_record(record: dict[str, object]) -> None:
     )
     state = DeviceState.from_dict(record["state"])
     policy = Policy.from_dict(record["policy"])
-    report = check_plan(plan, cards, state, policy, now=state.observed_at)
-    if not report.valid:
+    now = (
+        datetime.fromisoformat(record["evaluation_at"])
+        if "evaluation_at" in record
+        else state.observed_at
+    )
+    report = check_plan(plan, cards, state, policy, now=now)
+    expected_valid = record["expected_outcome"] != "invalid_plan"
+    if report.valid != expected_valid:
         raise ValueError("expected plan fails deterministic validation")
+    if record["schema_version"] == "edge-delegate-dataset.v1":
+        from edge_delegate.evaluation.outcomes import check_effects
+        from edge_delegate.planner.tasks import TaskDecision
+
+        TaskDecision.from_dict(record["expected_task"])
+        check_effects(
+            record["expected_effects"], state=state.values, final_output=None, invocations=[]
+        )
     unsigned = dict(record)
     claimed = unsigned.pop("content_sha256")
     if claimed != content_fingerprint(unsigned):

@@ -138,6 +138,13 @@ class ModelDiagnosticSession(Protocol):
 
 
 @runtime_checkable
+class WarmableModelSession(Protocol):
+    """Optional preparation before serving; must not call devices or external models."""
+
+    def warmup(self) -> Mapping[str, object]: ...
+
+
+@runtime_checkable
 class InferenceModelPlugin(Protocol):
     @property
     def descriptor(self) -> ModelPluginDescriptor: ...

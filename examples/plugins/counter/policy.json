@@ -1,0 +1,8 @@
+{
+  "schema_version": "policy.v0",
+  "policy_id": "counter-demo-local",
+  "granted_permissions": ["counter.write"],
+  "external_allowed": false,
+  "max_state_age_seconds": 10,
+  "budget": {"max_steps": 2, "max_total_latency_ms": 1000}
+}

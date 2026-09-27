@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edge-delegate-counter-example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["edge-delegate>=0.3,<0.4"]
+description = "Deterministic extension example; not a trained model or physical device"
+license = "MIT"
+
+[project.entry-points."edge_delegate.model_plugins.v1"]
+counter-demo = "edge_counter:plugin"
+display-demo = "edge_counter:display_plugin"
+
+[project.entry-points."edge_delegate.device_adapters.v1"]
+counter-demo = "edge_counter:device_adapter"
+
+[tool.setuptools]
+py-modules = ["edge_counter"]

@@ -12,6 +12,33 @@ device snapshot and policy, and gives only a validated plan to the executor.
 
 The planner can be a model, but the planner cannot authorize or invoke a capability.
 
+The bounded-task path is `request -> TaskDecision -> trusted task compiler -> PlanIR ->
+validation -> execution`. `functiongemma-tasks` and `task-classifier` share that compiler;
+the legacy `functiongemma` plugin still proposes complete plans. Task catalogs contain
+installed application code, never executable profile JSON.
+
+`edge-delegate-lab run` composes a persistent planner session, local-only policy, SQLite
+request/operation journal, and a selected installed deadline-aware device adapter (Unix by default).
+The first proposal is persisted before dispatch and reused on retries; input/device/plan changes
+under the same request ID are rejected. A separate emulator process owns device
+state and receipts. An uncertain acknowledgement blocks dependent/new operations until
+reconciliation; it is not a confirmed failure or permission to retry a write. The legacy
+simulator keeps its in-memory replay interface. See [gateway usage](gateway-preview.md).
+Installed catalogs and adapters are described in the [extension contract](extensions.md).
+
+The **runtime** is the reusable action-processing component. The **simulator** is a fake device.
+The **lab** is the development and test harness around them. A fixed-plan demo tests the runtime;
+a model preview tests proposal generation; `simulate` connects an actual model to the runtime
+without touching physical hardware. See the [guided walkthrough](try-it.md).
+
+## Public application ownership
+
+`edge_delegate.application.GatewaySession` now owns the persistent synchronous execution session.
+The lab gateway module is a compatibility re-export. It provides explicit preview/execute,
+status, receipt reconciliation and start/close lifecycle, and rejects concurrent same-session use.
+It does not yet implement the spawned supervisor, queue, service protocol or whole-request deadline.
+See [the SDK usage and limits](implementation-batch-1.md). Model loading remains caller-owned.
+
 ## Three boundaries, not one large application
 
 ```text
@@ -49,7 +76,7 @@ There are currently two ways a planner is constructed:
 flowchart LR
     Demo[edge-delegate demo] --> Static[StaticPlanner]
 
-    Lab[edge-delegate-lab plan, interactive, evaluate, or model-doctor] --> Registry[ModelPluginRegistry]
+    Lab[edge-delegate-lab plan, interactive, simulate, evaluate, or model-doctor] --> Registry[ModelPluginRegistry]
     Registry --> Plugin[Selected model plugin]
     Artifact[Optional adapter directory] --> Plugin
     Settings[Bounded plugin settings] --> Plugin
@@ -58,9 +85,12 @@ flowchart LR
 ```
 
 The runtime CLI demo uses `StaticPlanner`, so it exercises coordination and execution without a
-model. The lab uses the plugin registry for real-model evaluation. A production application can
-compose the same runtime ports and planner interface, but that service wiring is not implemented
-in the CLI yet.
+model. The lab uses the plugin registry for real-model evaluation and simulator execution.
+`simulate` gives the constructed planner to the ordinary coordinator and a fresh explicit device
+fixture; `plan` and `interactive` only inspect proposals against saved profile context.
+A production application can
+compose the same runtime ports and planner interface. The experimental `run` command now
+wires the reference Unix emulator; physical-device integration remains unqualified.
 
 For the built-in FunctionGemma plugin, construction may load a base model and optional Low-Rank
 Adaptation (LoRA) adapter. If the adapter has `edge-delegate-artifact.json`, the plugin verifies
@@ -177,14 +207,19 @@ or transmit one.
 | Simulator | `simulator/` | Implement `DeviceGateway` deterministically for tests | Claim to be production hardware |
 | Host lab | `edge_delegate_lab/` | Generate data, train, inspect compute, and evaluate | Be imported by the edge runtime |
 
-## Why there are two command-line programs
+Within the lab, `profiles.py` owns saved context, `client.py` owns non-executing queries,
+`simulation.py` composes model-to-runtime simulation, and `presentation.py` renders their
+results. CLI handlers select and connect these components; rendering does not authorize actions.
+
+## Command-line boundaries
 
 The separation is deliberate and tested:
 
 | Program | Commands | Intended environment |
 | --- | --- | --- |
 | `edge-delegate` | `demo`, `validate` | Small runtime/edge environment; no ML dependency required |
-| `edge-delegate-lab` | `generate-data`, `models`, `compute-inspect`, `compute-plan`, `train`, `artifact-verify`, `plan`, `interactive`, `model-doctor`, `evaluate` | Development host with optional model/training packages |
+| `edge-delegate-lab` | Data/training commands, profile and model previews, `simulate`, `run`, `reconcile`, `benchmark`, `qualify` | Development host or Linux gateway with optional model packages |
+| `edge-delegate-device` | Separate-process reference emulator | Linux/WSL; no physical hardware |
 
 `tests/architecture/test_dependencies.py` rejects runtime imports of the simulator, model
 plugins, datasets, evaluation code, connectors, or lab package. `tests/unit/test_cli_boundaries.py`
@@ -210,11 +245,11 @@ them.
 
 | Boundary | Implemented | Still planned |
 | --- | --- | --- |
-| Device | `DeviceGateway` protocol and deterministic simulator | Physical hardware adapters, persistent stores, real timeout/cancellation, recovery after partial physical failure |
-| Planner | Static planner, strict FunctionGemma planner, scripted backend | More real model plugins and a production request service |
-| Local execution | Sequential execution, reference resolution, revalidation, idempotency | Target-specific concurrency or compensation semantics, if ever required |
+| Device | Legacy simulator; versioned deadline gateway, bounded Unix adapter, separate-process emulator | Physical hardware adapters and hardware fault qualification |
+| Planner | Legacy full-plan model plus compact FunctionGemma and independently trained classifier sharing a task compiler | A model that passes all release gates; production request service |
+| Local execution | Revalidation, durable operation claims, replay/reconciliation, uncertain outcomes | Target-specific concurrency or compensation semantics, if ever required |
 | External work | Route validation, `external_required` status, handoff data type | Redaction pipeline, connector, response contract, response validation, provenance, timeout/cancellation |
-| Model lifecycle | Data generation, plugin export, preflight, LoRA training, artifact verification, non-executing query client, model doctor, evaluator | Deployment-quality dataset, embedded export, frozen representative device benchmarks |
+| Model lifecycle | Grouped task data, effect evaluation, both trainers, validation-outcome selection, artifact checks, persistent client, benchmark and qualification commands | Independently reviewed language coverage, passing quality/latency gates, embedded export, physical-device benchmarks |
 
 The code should be changed before a document claims that a planned boundary is implemented.
 

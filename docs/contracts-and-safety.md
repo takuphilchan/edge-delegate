@@ -75,7 +75,7 @@ Read the fields as follows:
 | `steps` | Lists capability calls in execution order. Each `step_id` is unique within the plan. |
 | `capability_id` | Selects one operation from the device's declared capability cards. It is not an arbitrary function name. |
 | `arguments` | Supplies typed input values. A `$ref` uses the result of an earlier successful step. |
-| `idempotency_key` | Makes retries of a write or physical operation detectable and safe. |
+| `idempotency_key` | Identifies repeated operations; safe recovery also requires a durable journal and device reconciliation. |
 | `reason_codes` | Explains non-action outcomes such as defer or deny; it is empty for this successful local proposal. |
 | `confidence` | Records the planner's self-reported confidence for measurement. It cannot override validation. |
 | `clarification` | Contains a question only when the route is `clarify`; otherwise it is `null`. |
@@ -118,7 +118,7 @@ Changing a step, argument, order, or idempotency key changes the plan fingerprin
 
 ## Execution and replay behavior
 
-The v0 executor is sequential:
+The legacy simulator path is sequential:
 
 1. Resolve references from prior successful step outputs.
 2. Validate and copy the resolved arguments, including the destination's range and enum constraints.
@@ -134,11 +134,39 @@ display. A valid number outside the display's permitted range is also rejected b
 display is invoked. An output-validation failure cannot undo a physical action that already
 happened; it is not evidence that retrying that action is safe.
 
-The in-memory stores make these rules testable. Production hardware will require persistent stores, timeouts/cancellation, and explicit partial-failure handling.
+The deadline-aware gateway path adds a SQLite journal. Before dispatch it atomically claims an
+operation bound to device, request, step, capability, and resolved arguments. An unresolved
+operation blocks other work on that device. Fresh state and authorization are checked before
+each new dispatch. Only the current step's dynamic guards are rechecked, so an already-completed
+step changing its own precondition does not invalidate later steps. Full-plan structure, reference
+checks, resource budgets, and approval fingerprints are retained; the plan is not sliced or
+rewritten to authorize a step. The transport enforces an absolute deadline. A timeout or malformed acknowledgement
+after dispatch returns `execution_unknown`, not confirmed failure. Dependent steps stop.
+
+Recorded operations are reconciled before applying new-dispatch state guards. If changed state
+or authorization prevents the request itself from validating, the separate `reconcile` command
+checks receipts without generating a plan, invoking an action, or resuming remaining steps.
+A confirmed result can be reused after restart. Neither this protocol nor the
+legacy in-memory store promises rollback or exactly-once physical execution. The current Unix
+adapter and separate-process emulator test this boundary; physical hardware remains unqualified.
 
 ## Audit privacy
 
-Audit events record request ID, event type, outcome, timestamp, route, plan hash, issue count, or step count. They deliberately exclude natural-language request text and step arguments. The current sink is in-memory and intended for testing; retention and persistence remain deployment work.
+Gateway requests are durably bound to input digest, device identity, and the complete proposed
+plan before execution. Retries reuse that proposal; a different input/device/plan under the
+same request ID is rejected. Current validation still applies to unfinished work. Old rows
+without a request binding require receipt-only reconciliation rather than automatic replanning.
+
+Optional device-side cancellation fences an unresolved operation; it is not host-side deletion
+or rollback. The device must retain a tombstone that rejects late invocation. See the
+[recovery procedure](gateway-preview.md#when-the-device-has-no-receipt).
+
+Audit events record request ID, event type, outcome, timestamp, route, plan hash, issue count, or
+step count. They deliberately exclude request text and step arguments. Legacy simulation uses
+an in-memory sink; gateway sessions use SQLite. The operation journal also stores argument
+fingerprints, complete saved plans (including arguments), and confirmed results, which may
+contain sensitive device data. Input digests are not anonymization. Retention, encryption at
+rest, and backups remain deployment responsibilities; this is not a claim of anonymous storage.
 
 ## Model and connector trust matrix
 

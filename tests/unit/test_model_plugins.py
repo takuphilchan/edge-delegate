@@ -109,7 +109,12 @@ def test_registry_lists_without_loading_and_loads_only_the_selected_plugin() -> 
 def test_builtin_functiongemma_plugin_is_discoverable_without_loading_torch() -> None:
     registry = builtin_model_plugins()
 
-    assert registry.plugin_ids() == ("functiongemma",)
+    assert registry.plugin_ids() == (
+        "bounded-commands",
+        "functiongemma",
+        "functiongemma-tasks",
+        "task-classifier",
+    )
     assert registry.get("functiongemma").descriptor.supported_protocols == (
         "functiongemma-submit-plan",
     )

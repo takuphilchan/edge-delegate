@@ -13,20 +13,30 @@ def _subcommands(parser):
 
 
 def test_edge_cli_exposes_only_runtime_safe_commands() -> None:
-    assert _subcommands(build_edge_parser()) == {"demo", "validate"}
+    assert _subcommands(build_edge_parser()) == {"demo", "validate", "pack-check"}
 
 
 def test_lab_cli_owns_data_model_and_compute_commands() -> None:
     assert _subcommands(build_lab_parser()) == {
         "artifact-verify",
+        "artifact-export",
+        "audit-validation",
         "compute-inspect",
         "compute-plan",
         "evaluate",
         "generate-data",
+        "review-data",
         "interactive",
+        "init-example",
         "model-doctor",
         "models",
         "plan",
+        "profile-check",
+        "simulate",
+        "run",
+        "reconcile",
+        "benchmark",
+        "qualify",
         "train",
     }
 
@@ -35,8 +45,8 @@ def test_models_command_describes_plugin_without_loading_model_weights(capsys) -
     assert lab_main(["models"]) == 0
     result = json.loads(capsys.readouterr().out)
 
-    assert result[0]["plugin"]["plugin_id"] == "functiongemma"
-    assert result[0]["compute_capabilities"]["supports_peft"] is True
+    gemma = next(item for item in result if item["plugin"]["plugin_id"] == "functiongemma")
+    assert gemma["compute_capabilities"]["supports_peft"] is True
 
 
 def test_compute_plan_is_machine_readable(capsys) -> None:

@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 .hypothesis/
 .ruff_cache/
@@ -16,6 +18,8 @@ Thumbs.db
 data/raw/*
 data/interim/*
 data/processed/*
+data/generated/*
+data/review/
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/processed/.gitkeep
@@ -26,4 +30,3 @@ artifacts/*
 .env.*
 !.env.example
 configs/local/
-

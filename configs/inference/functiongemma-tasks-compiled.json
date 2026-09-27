@@ -1,0 +1,6 @@
+{
+  "merge_adapter": true,
+  "compile_decode": true,
+  "cpu_threads": 4,
+  "max_new_tokens": 96
+}

@@ -4,6 +4,19 @@ This guide explains the implemented project in the same boundaries used by the c
 wire rules live in `specs/` and `schemas/`; these pages explain how to understand and operate
 them.
 
+**New here?** Follow [Try Edge Delegate](try-it.md) to run the system and understand exactly what
+each test proves. Then use [Delivery plan](roadmap.md) for phased work, dependencies, and release gates.
+
+The [release contract](release-contract.md) records scope and trust boundaries. Use
+[first-batch tooling](implementation-batch-1.md) for numeric challenges, review history, candidate
+packs and the public session API. [Reference-device proposal](reference-device.md) is awaiting
+procurement approval, not a hardware-support claim.
+
+For the new bounded-task model and durable device-emulator workflow, use the
+[local gateway preview](gateway-preview.md). This is explicitly experimental.
+The [qualification status](qualification-status.md) records what was tested and why neither
+current model candidate is supported yet.
+
 ## The mental model
 
 Edge Delegate has one safety rule that everything else follows:
@@ -27,8 +40,10 @@ request + device capabilities + live state + policy
                        route decision or local executor
 ```
 
-The model never receives direct access to sensor or actuator functions. For FunctionGemma, it
-receives one synthetic `submit_plan` function and must submit the complete plan for inspection.
+The model never receives direct access to sensor or actuator functions. The legacy FunctionGemma
+plugin submits complete plans through `submit_plan`. The compact `functiongemma-tasks` plugin
+uses `select_task`; trusted code turns that short decision into a plan. The independently trained
+`task-classifier` plugin uses the same task compiler without a generative language model.
 
 ## The three parts of the repository
 
@@ -51,10 +66,16 @@ the runtime depends only on the `DeviceGateway` interface.
 
 | Goal | Read |
 | --- | --- |
+| Run a working example and distinguish harness tests from model tests | [Try Edge Delegate](try-it.md) |
+| Choose the next improvement and its acceptance evidence | [Milestone roadmap](roadmap.md) |
 | Understand how a request moves through the code | [System architecture](system-architecture.md) |
 | Understand Plan IR and why execution is fail-closed | [Contracts and safety](contracts-and-safety.md) |
 | Add another model or understand adapter portability | [Model plugins, artifacts, and compute](model-plugins-and-compute.md) |
+| Install a task/device extension and understand its guarantees | [Extension contract](extensions.md) |
 | Understand data generation, training, and evaluation | [Model lifecycle](model-lifecycle.md) |
+| Review proposed dataset-v2 labels, independent expectations, and collection gates | [Dataset v2 draft](../specs/dataset-v2.md) (collection policy not approved) |
+| Check review records before a pilot dataset is accepted | [Review-workspace tooling](../specs/dataset-review-workspace.md) (implemented; not training approval) |
+| Review the 80-example exposed pilot draft | [Pilot review instructions](../data/fixtures/pilot-v2/README.md) (all labels pending) |
 | Run setup, training, evaluation, or troubleshooting commands | [Development runbook](development-runbook.md) |
 | Look up an acronym or project term | [Glossary](glossary.md) |
 
@@ -65,6 +86,8 @@ choose only the page that matches your work.
 
 This division prevents the same explanation from drifting across several files:
 
+- [Try Edge Delegate](try-it.md) owns the first-use walkthrough and what each test proves.
+- [Milestone roadmap](roadmap.md) owns planned work and acceptance criteria, not implemented behavior.
 - [System architecture](system-architecture.md) owns component boundaries, the actual request
   path, dependency direction, and current-versus-future wiring.
 - [Contracts and safety](contracts-and-safety.md) owns data shapes, validation rules, permissions,
@@ -73,6 +96,8 @@ This division prevents the same explanation from drifting across several files:
   model isolation, artifact compatibility, and compute-plan selection.
 - [Model lifecycle](model-lifecycle.md) owns canonical data, model-specific exports, preflight,
   training, and evaluation meaning.
+- [Dataset v2 draft](../specs/dataset-v2.md) owns proposed collection and labeling rules; it does
+  not describe an implemented generator or independently reviewed dataset.
 - [Development runbook](development-runbook.md) owns commands, expected outputs, and failure
   recovery. It should not be used as the architecture specification.
 - [Glossary](glossary.md) owns definitions and acronym expansions.
@@ -82,14 +107,14 @@ This division prevents the same explanation from drifting across several files:
 | Area | State now |
 | --- | --- |
 | Typed contracts, parsing, validation, policy, and simulator execution | Implemented |
-| Runtime device/audit/idempotency interfaces | Implemented; in-memory implementations are used today |
+| Runtime device/audit/idempotency interfaces | In-memory simulation plus versioned deadline gateway and SQLite journal |
 | FunctionGemma inference and Low-Rank Adaptation (LoRA) training | Implemented on the host development machine |
 | Portable adapter manifest and strict file verification | Implemented |
 | Model evaluation | Implemented; model doctor never executes, dataset evaluation may execute only in the simulator |
 | Physical hardware adapters | Not implemented |
 | External-model handoff transmission | Not implemented; connector modules are placeholders |
 | Embedded model export and target-device benchmarks | Not implemented |
-| Deployment-quality model | Not achieved; the pilot corpus is intentionally small |
+| Deployment-quality model | Not achieved; both bounded-task candidates fail qualification on the new held-out corpus |
 
 ## Sources of truth
 
@@ -101,7 +126,7 @@ This division prevents the same explanation from drifting across several files:
 | What can invoke a device? | [`src/edge_delegate/runtime/executor.py`](../src/edge_delegate/runtime/executor.py) and [`ports.py`](../src/edge_delegate/runtime/ports.py) |
 | How is a model selected and loaded? | [`src/edge_delegate/model_plugins/`](../src/edge_delegate/model_plugins/) |
 | How is FunctionGemma trained? | [`src/edge_delegate_lab/models/functiongemma/`](../src/edge_delegate_lab/models/functiongemma/) |
-| What behavior is normative? | [`specs/`](../specs/) |
-| What commands are supported? | The two CLI parsers and the [development runbook](development-runbook.md) |
+| What behavior is normative? | Accepted contracts in [`specs/`](../specs/); explicitly marked drafts are proposals only |
+| What commands are supported? | Runtime/lab CLI parsers, the emulator entry point, and the [development runbook](development-runbook.md) |
 
 [Next: System architecture](system-architecture.md)

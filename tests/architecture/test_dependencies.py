@@ -34,3 +34,27 @@ def test_runtime_does_not_import_adapters_or_lab_packages() -> None:
                 ):
                     violations.append(f"{path.name}:{node.lineno} imports {name}")
     assert not violations, "runtime dependency violations:\n" + "\n".join(violations)
+
+
+def test_public_application_never_imports_the_lab_or_a_model_family():
+    root = RUNTIME_ROOT.parent / "application"
+    forbidden = (
+        "edge_delegate_lab",
+        "torch",
+        "transformers",
+        "peft",
+        "edge_delegate.model_plugins.functiongemma",
+        "edge_delegate.model_plugins.task_classifier",
+    )
+    for path in root.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            names = (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else ([node.module] if isinstance(node, ast.ImportFrom) and node.module else [])
+            )
+            assert not any(
+                name == prefix or name.startswith(prefix + ".")
+                for name in names
+                for prefix in forbidden
+            ), path

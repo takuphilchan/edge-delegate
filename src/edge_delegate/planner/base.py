@@ -23,6 +23,26 @@ class PlannerContext:
     policy: Policy
 
 
+@dataclass(frozen=True, slots=True)
+class PlanningObservation:
+    """Optional per-call evidence, never authority to execute a device action.
+
+    decision is the plugin's checked decision before deterministic plan compilation,
+    not necessarily the raw model output. No shared last-decision state is used.
+    """
+
+    plan: PlanIR | None = None
+    decision: dict[str, object] | None = None
+    error: Exception | None = None
+
+    def unwrap(self) -> PlanIR:
+        if self.error is not None:
+            raise self.error
+        if not isinstance(self.plan, PlanIR):
+            raise PlannerOutputError("observation contains no typed plan")
+        return self.plan
+
+
 @runtime_checkable
 class Planner(Protocol):
     def plan(self, request: PlanningRequest, context: PlannerContext) -> PlanIR:

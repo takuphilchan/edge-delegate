@@ -138,6 +138,9 @@ class FunctionGemmaModelPlugin:
     ) -> tuple[TransformersFunctionGemmaBackend, int, int]:
         allowed = {
             "allow_legacy_artifact",
+            "cpu_threads",
+            "merge_adapter",
+            "compile_decode",
             "device_map",
             "dtype",
             "max_new_tokens",
@@ -186,6 +189,10 @@ class FunctionGemmaModelPlugin:
             dtype=dtype,
             revision=revision,
             max_context_tokens=max_context_tokens,
+            stop_on_tool_end=getattr(self, "stop_on_tool_end", False),
+            cpu_threads=settings.get("cpu_threads"),
+            merge_adapter=settings.get("merge_adapter", False),
+            compile_decode=settings.get("compile_decode", False),
         )
         return backend, retrieval_limit, max_new_tokens
 
@@ -213,7 +220,7 @@ class FunctionGemmaModelPlugin:
         return {
             "plugin_id": self.descriptor.plugin_id,
             "format": "functiongemma-chat-sft.v1",
-            "prompt_version": "functiongemma-plan-v0",
+            "prompt_version": getattr(self, "prompt_version", "functiongemma-plan-v0"),
             "loss_target": "assistant_tool_call_only",
             "files": files,
         }

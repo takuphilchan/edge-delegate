@@ -1,0 +1,8 @@
+{
+  "plugin_id": "task-classifier",
+  "train_file": "data/generated/tasks-v1-r2/task-classifier-train.jsonl",
+  "eval_file": "data/generated/tasks-v1-r2/task-classifier-validation.jsonl",
+  "output_dir": "artifacts/training/task-classifier-v1-r2-quality",
+  "seed": 17,
+  "epochs": 200
+}

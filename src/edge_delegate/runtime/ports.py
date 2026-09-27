@@ -17,6 +17,49 @@ class CapabilityExecutionError(RuntimeError):
     """A device adapter could not safely complete a capability invocation."""
 
 
+class UnknownPhysicalOutcome(CapabilityExecutionError):
+    """The action may have happened; callers must not blindly retry it."""
+
+
+@dataclass(frozen=True, slots=True)
+class Reconciliation:
+    status: str  # succeeded, failed, or unknown
+    result: JsonValue = None
+
+
+@runtime_checkable
+class DeadlineGateway(Protocol):
+    """v2 extension; deadline is an absolute host monotonic-clock timestamp."""
+
+    @property
+    def api_version(self) -> str: ...
+
+    @property
+    def device_id(self) -> str: ...
+
+    def invoke_bounded(
+        self,
+        capability_id: str,
+        arguments: Mapping[str, JsonValue],
+        *,
+        operation_id: str,
+        deadline: float,
+    ) -> JsonValue: ...
+
+    def reconcile(self, operation_id: str, *, deadline: float) -> Reconciliation: ...
+
+
+@runtime_checkable
+class CancellationGateway(Protocol):
+    """Optional durable fence, not rollback or deletion of operation history.
+
+    Atomically return an existing receipt, or persist a tombstone that prevents
+    this operation ID from ever dispatching. No receipt alone is not cancellation.
+    """
+
+    def cancel_operation(self, operation_id: str, *, deadline: float) -> Reconciliation: ...
+
+
 @runtime_checkable
 class Clock(Protocol):
     def now(self) -> datetime:
