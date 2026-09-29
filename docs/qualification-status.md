@@ -2,6 +2,26 @@
 
 Snapshot: 27 September 2026. **Experimental; neither trained candidate is release-qualified.**
 
+## Targeted control batch (28 September 2026)
+
+The public control SDK now accepts an explicitly installed action catalog and targets exact
+device identities. The two-light software demonstration implements power/brightness writes
+and reads, ambiguous-name clarification, and durable request/receipt recovery. Catalog rules,
+device capabilities, registration and policy are bound to requests/plans. This is deterministic
+control, not new trained-model capability; existing model results below remain unchanged.
+
+Verification: **583 software tests passed, one hardware test excluded**, including 37 control
+tests; Ruff and diff whitespace checks passed. Built wheels passed isolated installation outside
+the checkout without ML dependencies, including targeted light control and ambiguity rejection.
+Control tests cover parameter bounds, permissions, plan-scoped approvals, stale state, identity/
+configuration drift, request-ID conflicts, concurrent duplicates, restart, and lost acknowledgements.
+
+No production timing, physical effect, independent language-quality, or soak qualification was
+performed for this batch. Manual CLI output from temporary storage is not a performance claim.
+Supervisor/service, whole-request deadlines, generalized production packs, trained control models,
+jobs/automation, and physical qualification remain pending. See [control usage](device-control.md)
+and the [expanded roadmap](roadmap.md#expanded-device-control-delivery).
+
 ## Numeric failure diagnosis and deterministic baseline
 
 Raw generation inspection confirmed that the current model returns deny for valid `0`/`+12`,

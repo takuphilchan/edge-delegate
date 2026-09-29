@@ -1,5 +1,10 @@
 # Development Runbook
 
+`edge-delegate control-demo --directory PRIVATE_DIRECTORY --text "Set the inspection light to 40%."`
+previews an exact command for two software lights. Add `--execute` to change emulator state;
+`--request-id ID` supports durable retries. No model is loaded. See [device controls](device-control.md)
+for the structured SDK, recovery, limitations, and `bash scripts/test-control.sh` automatic tests.
+
 New roadmap tooling: `edge-delegate pack-check --manifest PATH` verifies candidate integrity,
 not release readiness. [First-batch instructions](implementation-batch-1.md) cover the public SDK,
 `bash scripts/test-numeric.sh`, review-history submissions/exports and qualification v2.

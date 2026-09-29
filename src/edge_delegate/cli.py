@@ -158,7 +158,21 @@ def build_parser() -> argparse.ArgumentParser:
     demo = commands.add_parser("demo", help="run the deterministic local vertical slice")
     demo.set_defaults(handler=_demo_command)
 
-    pack = commands.add_parser("pack-check", help="verify candidate pack integrity, not release approval")
+    from edge_delegate.simulator.control_demo import run_demo
+
+    controls = commands.add_parser(
+        "control-demo",
+        help="preview or explicitly execute exact commands on two software lights",
+    )
+    controls.add_argument("--directory", type=Path, required=True)
+    controls.add_argument("--text", required=True)
+    controls.add_argument("--request-id")
+    controls.add_argument("--execute", action="store_true", help="change emulator state")
+    controls.set_defaults(handler=run_demo)
+
+    pack = commands.add_parser(
+        "pack-check", help="verify candidate pack integrity, not release approval"
+    )
     pack.add_argument("--manifest", type=Path, required=True)
     pack.set_defaults(handler=_pack_check_command)
 

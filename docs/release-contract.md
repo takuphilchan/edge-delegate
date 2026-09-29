@@ -5,6 +5,14 @@
 Owner-approved direction recorded 27 September 2026. This is a development contract,
 not a support claim or purchase authorization.
 
+Scope revision, 28 September 2026: the product direction now includes targeted device
+control, followed by jobs and bounded automation. The first implementation adds two software
+lights with explicit power/brightness control and a public structured SDK. It is experimental,
+not an extension of physical support or existing model qualification. See the
+[expanded delivery sequence](roadmap.md#expanded-device-control-delivery) and
+[implemented control contract](device-control.md). The three-task behavior below remains the
+legacy model/artifact contract; it must not silently acquire new meanings.
+
 ## Behavior
 
 One configured sensor/display; English text; stateless requests. Return Celsius readings;

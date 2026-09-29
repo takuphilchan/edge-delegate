@@ -13,7 +13,7 @@ def _subcommands(parser):
 
 
 def test_edge_cli_exposes_only_runtime_safe_commands() -> None:
-    assert _subcommands(build_edge_parser()) == {"demo", "validate", "pack-check"}
+    assert _subcommands(build_edge_parser()) == {"demo", "validate", "pack-check", "control-demo"}
 
 
 def test_lab_cli_owns_data_model_and_compute_commands() -> None:

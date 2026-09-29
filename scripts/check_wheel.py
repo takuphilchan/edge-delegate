@@ -50,6 +50,32 @@ def main():
             "import importlib.util; assert importlib.util.find_spec('torch') is None",
         )
         assert json.loads(run("edge-delegate", "demo"))["display_value"] == 24.5
+        controls = json.loads(
+            run(
+                "edge-delegate",
+                "control-demo",
+                "--directory",
+                str(root / "lights"),
+                "--text",
+                "Set the inspection light to 40 percent.",
+                "--execute",
+            )
+        )
+        assert controls["state"]["inspection light"]["light.brightness_percent"] == 40
+        assert controls["state"]["workbench light"]["light.brightness_percent"] == 100
+        ambiguous = json.loads(
+            run(
+                "edge-delegate",
+                "control-demo",
+                "--directory",
+                str(root / "lights"),
+                "--text",
+                "Turn the light on.",
+                "--execute",
+                expected=2,
+            )
+        )
+        assert ambiguous["response"]["status"] == "clarification_required"
         run("edge-delegate", "pack-check", "--help")
         run(
             "python",
@@ -202,7 +228,7 @@ def main():
         audit = json.loads((root / "audit" / "audit.json").read_text())
         assert audit["complete"] is True and audit["qualified"] is False
     print(
-        "PASS: isolated wheel install, profile, preview, Unix execution/replay, managed session, independent counter extension, validation audit, review guard and oracle; no ML dependencies"
+        "PASS: isolated wheel install, targeted light controls, profile, preview, Unix execution/replay, managed session, independent counter extension, validation audit, review guard and oracle; no ML dependencies"
     )
 
 

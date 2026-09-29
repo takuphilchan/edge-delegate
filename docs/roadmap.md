@@ -6,6 +6,75 @@ Approved direction: 27 September 2026. This is the single roadmap. Features, tes
 results are not release authorization. **Current status: internal experimental candidate.**
 The exact supported native deployment remains to be selected and qualified.
 
+## Expanded device-control delivery
+
+Scope updated 28 September 2026 at the owner's request. The product is a local-first
+device-control SDK/gateway, not a temperature-only assistant. Existing sensor/display work
+below remains a compatibility fixture and the source of operational release gates. Its
+three-task model evidence does not qualify new controls. No new physical support is claimed.
+
+The reference environment will contain two named dimmable lights, a configurable status
+display, a bounded measurement logger, and an indicator. Keep immediate commands, long-running
+jobs, and persistent rules as separate execution contracts. Structured clients bypass model
+inference, never authorization. Installed adapters/builders remain trusted code.
+
+| Control milestone | Deliverable | Exit evidence / dependencies |
+| --- | --- | --- |
+| C0: behavior | Per-action targets, units, limits, effects, ambiguity and approval rules | Contract before implementation; physical assembly separately approved |
+| C1: targeted contracts | Registry, stable endpoint binding, typed requests, versioned pack/catalog generalization | Invalid targets/arguments/configurations rejected; legacy compatibility |
+| C2: immediate controls | Multi-device emulator; independent targeted power/brightness and display actions | Correct effects, permissions, duplicates, lost ACK, replacement, concurrent sessions |
+| C3: supervised application | Isolated inference worker, local service/client, bounded queue and deadlines | No dispatch after cancellation/expiry; worker/storage/overload faults |
+| C4: jobs | Logger configure/start/status/stop; persistent job identities and limits | Separate admission/completion; restart reconciliation; no silent resume or duplicate start |
+| C5: learned control planner | Reviewed target/action/parameter data, compatible model candidates | Per-family frozen outcome gates; independent review; no test-set tuning |
+| C6: routines then rules | Installed named sequences, then bounded declarative automations | Explicit partial completion, conflicts, debounce/cooldown, expiry, event storms and restart tests |
+| C7: physical/deployment release | Named adapter/firmware, observed physical effects, install/recovery/soak/pilot | All applicable acceptance gates below plus action/target/job/rule gates |
+
+Dependencies: C0 -> C1 -> C2 -> C3 -> C4. Data design starts alongside C1, but C5 training
+waits for stable contracts and reviewed exports. C6 requires reliable C3/C4. C7 requires
+physical access, matching qualification, independent adopter/reviewer evidence, and owner
+release approval. Hardware procurement, publication, paid services and destructive changes
+are not authorized by this engineering roadmap. Re-estimate the earlier 16-24 week allowance
+after C1: the broader scope is not covered by that old estimate.
+
+Control-specific gates: >=98% correct completed outcomes per action family; >=95% correct
+clarification and refusal separately; zero wrong-target, wrong-but-permitted or unauthorized
+actions in frozen suites. Begin collection with at least 100 functional test cases per action
+family plus distinct ambiguity/parameter/safety suites; report family correlations and intervals.
+Cover similar names, negation, read/write distinctions, bounds/units/modes, unavailable devices,
+restricted contexts, unsupported compounds and unseen names within supported action families.
+No generated independent approvals. Exposed pilot examples/descendants are not fresh holdouts.
+
+Compare deterministic grammar, intent/slot baseline and a new compact model adapter. A new
+driver alone does not teach the current weights new actions. Keep model-family code in plugins
+and the core install free of ML dependencies. Prefer small decisions, not model-generated
+transport calls or arbitrary programs. Retain explicit target selection initially; pronouns,
+voice, cloud, hazardous loads, shell execution and firmware updates remain excluded.
+
+Immediate requests retain the disk-backed P95 <1s target; job admission and completion are
+measured separately. Rules run deterministically without repeated LLM calls. Timed physical
+actions require device-enforced limits. Multi-device sequences report partial completion;
+there is no distributed transaction, implicit rollback, or blind replay.
+
+### Implemented first control batch
+
+- `ControlRequest`/`ControlTarget` v1, registry with ambiguous shared aliases, and public
+  `ControlSession` preview/execute/reconcile through existing runtime validation/execution.
+- Explicit installed action catalogs and optional command parsers; catalog fingerprints bind
+  argument rules/semantics. The application session does not hardcode light actions.
+- Durable two-light emulator; explicit boolean power and integer 0-100 brightness. Power and
+  brightness are independent. All device sessions share one journal for global request IDs.
+- Identity/configuration checks at dispatch, plan-bound target fingerprints, and lost-ACK
+  recovery tests. Exact commands and `edge-delegate control-demo`; no learned inference.
+- [Usage and precise limits](device-control.md), automated control test script, and clean-wheel
+  acceptance coverage.
+
+This completes a vertical slice of C0-C2, **not all of C1/C2 or the roadmap**. One endpoint per
+device and one target per request only. New outer control envelopes compile into unchanged
+Plan IR v0; they are not a multi-target plan format. Task-pack generalization, trained decision
+protocol, display/logger/indicator controls, service supervision, whole-request deadlines,
+jobs/rules and physical qualification remain pending. Next: finish C1 catalog/pack contracts
+and binding evidence, then C3 supervision before expanding long-running controls.
+
 ## Product and release sequence
 
 Ship an offline developer SDK and supervised Linux gateway for three bounded English tasks:

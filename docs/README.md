@@ -7,6 +7,9 @@ them.
 **New here?** Follow [Try Edge Delegate](try-it.md) to run the system and understand exactly what
 each test proves. Then use [Delivery plan](roadmap.md) for phased work, dependencies, and release gates.
 
+For the expanded device-control direction, try [two-light controls](device-control.md).
+It is a separate deterministic SDK path; the existing trained temperature plugins are unchanged.
+
 The [release contract](release-contract.md) records scope and trust boundaries. Use
 [first-batch tooling](implementation-batch-1.md) for numeric challenges, review history, candidate
 packs and the public session API. [Reference-device proposal](reference-device.md) is awaiting

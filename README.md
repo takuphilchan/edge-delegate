@@ -15,6 +15,11 @@ Training can improve proposals. It cannot bypass validation, policy, or the exec
 
 ## Start here
 
+Want to control more than the temperature example? The new
+[two-light control SDK and demo](docs/device-control.md) supports explicit device targeting,
+power, and brightness through structured requests or exact commands. It is a software-only,
+non-ML implementation of the first expanded-control milestone; it does not retrain the model.
+
 Want to exercise the three bounded commands without model misinterpretation? The optional
 [`bounded-commands` path](docs/gateway-preview.md#bounded-commands-without-learned-model-execution)
 uses a closed grammar and declines unrecognized wording. It is not a trained model or a
@@ -45,6 +50,8 @@ Version `0.3.0` has an implemented vertical slice:
 - a coordinator, sequential executor, replay protection, and privacy-minimal audit events;
 - a deterministic simulator implementing the same device interface expected from future
   hardware adapters;
+- a targeted control SDK and durable two-light emulator, with ambiguous-name clarification,
+  per-device authorization, and shared request identity tracking;
 - a model-neutral planner interface and versioned model-plugin interface;
 - a built-in FunctionGemma plugin with strict `submit_plan` parsing;
 - one-shot and interactive non-executing clients for testing arbitrary queries against a typed
