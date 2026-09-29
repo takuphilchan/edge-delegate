@@ -1,5 +1,15 @@
 # Add tasks and devices without changing the runtime
 
+Use this after you have run the [tutorial](try-it.md) and understand the
+[public Python interface](reference/control-sdk.md). This is a developer integration guide,
+not a hardware auto-discovery wizard.
+
+There are two separate questions: can the system perform an operation, and can a model
+understand requests for it? A device adapter answers the first. A compatible planner and
+its task vocabulary answer the second. Adding a driver alone does not train a model.
+Start with explicit structured requests or a deterministic test planner to verify your
+integration before introducing language-model errors.
+
 This is an experimental extension contract. An installed plugin is trusted Python code,
 not a sandbox. Install only packages you trust. JSON device profiles contain data, never
 module paths, import statements, or executable builders.

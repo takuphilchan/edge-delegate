@@ -1,5 +1,15 @@
 # Local gateway preview
 
+Use this guide when you want a persistent temperature/display session: the planner stays
+loaded between independent requests, and operation records survive process restarts.
+It builds on the [model tutorial](model-tutorial.md), or you can choose the no-model
+bounded-command path below. For your first encounter with Edge Delegate, use the
+[software-light tutorial](try-it.md) instead.
+
+Choose one path, not every section in order. The bounded-command section needs no weights;
+the model section requires an existing compatible artifact. The separate-process section is
+for managing your own emulator process, not an additional step after managed startup.
+
 Experimental Linux/WSL gateway; **not a qualified physical-device controller**.
 Select new bounded-task plugins explicitly. No trained artifact is automatically promoted.
 Read the [measured qualification status](qualification-status.md) before interpreting model results.

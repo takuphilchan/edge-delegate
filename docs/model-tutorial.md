@@ -5,6 +5,15 @@
 This path tests learned planning for three temperature/display tasks. It does not teach the model
 light controls. Start with the no-model tutorial if you are checking installation.
 
+**What you will learn:** how to load an existing model candidate, inspect its proposal without
+acting, then test it against a software device. This tutorial does not train new weights.
+If you do not have a compatible artifact yet, you can still complete the no-model tutorial;
+missing model files are not a core-installation failure.
+
+The reference tasks are: read temperature, display an explicit number, and read then display
+temperature. They are deliberately small so that expected values, effects and non-actions
+can be checked. They do not demonstrate arbitrary-device language control.
+
 ## Prerequisites
 
 Use Linux/WSL, an activated Python 3.12+ environment, and the repository root for the scripts below.

@@ -22,6 +22,11 @@ Keep old useful URLs as signposts; archive historical evidence rather than delet
 
 ## Writing and evidence rules
 
+- Open with the reader's goal, prerequisites and expected outcome before internal terminology.
+- Explain why an example exists and whether it demonstrates the product goal or only one part.
+- End a workflow with a success checkpoint, common failure guidance and a specific next step.
+- Do not require readers to follow a long chain of links to learn the system's purpose.
+- Prefer one worked example over an unexplained list of class names or features.
 - Expand an acronym on first use and link unfamiliar terms to the glossary.
 - Say explicitly whether a path is structured, deterministic text parsing or learned inference.
 - Separate proposed route, passing validation, confirmed operation and correct user outcome.

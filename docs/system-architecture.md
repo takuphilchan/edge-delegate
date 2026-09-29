@@ -2,9 +2,26 @@
 
 [Documentation home](README.md) | [Terms](glossary.md) | [Current status](qualification-status.md)
 
-Edge Delegate separates deciding what was requested from deciding what may execute.
-Its current adapters control software devices. Physical support and the supervised service
-remain unqualified or unimplemented; this page describes existing code.
+Read this after the [software-light tutorial](try-it.md), or start with the
+[project purpose](../README.md) if you have not used the system yet.
+This page explains how a request reaches a device and which component owns each decision.
+It describes existing code, not a promise that the planned service or physical support is ready.
+
+## The mental model
+
+Your application supplies a request. An interpreter turns it into an explicit proposal.
+The runtime checks that proposal and asks a device adapter to perform only permitted operations.
+An adapter is the code that talks to the device; today the supplied integrations use software
+devices. An operation journal keeps a durable record so that a timeout or retry is not treated
+as completely new work.
+
+For the light example, the interpreter is an exact command parser. For the temperature model
+experiment, it is a learned planner. Both ultimately use runtime checks, but their supported
+vocabularies differ. A model is optional; permissions and execution checks are not.
+
+The application and Python runtime run on a host/gateway, not inside a microcontroller.
+The model lab runs on the development host to train and evaluate candidates. Training is not
+something the runtime performs each time it receives a command.
 
 ## Three proposal paths, one execution boundary
 

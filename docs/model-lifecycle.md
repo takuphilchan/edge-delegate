@@ -272,7 +272,11 @@ underrepresented routes. Training loss alone would have hidden those failures.
 
 ## Required dataset v1 improvements
 
-Before another serious training claim:
+This is the historical follow-up list from the early full-plan pilot, not the current training
+checklist. Later tooling implemented parts of it, while multilingual support remains outside
+the current English-only release scope. Use the [active data gates](roadmap.md#evidence-and-reviewed-data)
+and [current evidence](qualification-status.md) for decisions about the next training run.
+The original research directions are retained below for context:
 
 1. Create multiple independent scenario groups for every route in train, validation, and test.
 2. Balance no-step outcomes against direct-action, multi-step, reference, and hybrid plans.

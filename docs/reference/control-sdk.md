@@ -3,8 +3,14 @@
 [Documentation home](../README.md) | [Tutorial](../try-it.md) | [Architecture](../system-architecture.md)
 
 The software development kit (SDK) is a synchronous, experimental Python API. It does not load
-a model, run a service or control physical lights by itself. These imports work from the
-installed package without the lab:
+a model, run a service or control physical lights by itself.
+
+Use this page when you want to replace the demonstration's terminal commands with calls from
+your own program. Start with the [complete example below](#small-complete-example), then look
+up methods as needed. It requires the core installation from the [tutorial](../try-it.md#1-install),
+not the inference or training dependencies.
+
+These imports work from the installed package without the lab:
 
 ~~~python
 from edge_delegate.application import ControlSession, DeviceRegistration, DeviceRegistry
@@ -18,6 +24,10 @@ from edge_delegate.simulator.lights import LightEmulator, light_policy
 This example creates isolated software state, then previews and executes one typed request.
 Temporary state is for this disposable test only. A persistent application must retain its
 journal, device state and original requests.
+
+Run the complete block as a Python script in your activated environment. A successful run
+finishes with no output and no assertion failure. It intentionally uses no language parser:
+your application already supplies the target, action and value explicitly.
 
 <!-- sdk-example -->
 ~~~python

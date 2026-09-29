@@ -4,41 +4,22 @@ This is a maintainer task reference, not the first-use sequence. New users start
 [software-light tutorial](try-it.md); model users continue with the [model tutorial](model-tutorial.md).
 The [command inventory](reference/cli.md) is checked against the actual parsers.
 
-`edge-delegate control-demo --directory PRIVATE_DIRECTORY --text "Set the inspection light to 40%."`
-previews an exact command for two software lights. Add `--execute` to change emulator state;
-`--request-id ID` supports durable retries. No model is loaded. See [device controls](device-control.md)
-for the structured SDK, recovery, limitations, and `bash scripts/test-control.sh` automatic tests.
-
-New roadmap tooling: `edge-delegate pack-check --manifest PATH` verifies candidate integrity,
-not release readiness. [First-batch instructions](implementation-batch-1.md) cover the public SDK,
-`bash scripts/test-numeric.sh`, review-history submissions/exports and qualification v2.
-
-`bash scripts/test-bounded.sh` tests the separate deterministic command grammar (no weights).
-For the learned-model failure trace, use `bash scripts/test-numeric.sh --include-raw-output`;
-this explicit diagnostic flag saves raw generations for the public development suite.
-
-For `edge-delegate-lab run` and the separate-process device emulator, follow the
-[gateway preview walkthrough](gateway-preview.md). Execution is explicit and experimental.
-Use `edge-delegate-lab benchmark` for persistent-session timing and `edge-delegate-lab qualify`
-to check the combined dataset, quality, and performance evidence without promoting an artifact.
-Use `edge-delegate-lab reconcile --socket SOCKET --journal JOURNAL --request-id REQUEST_ID`
-to check recorded receipts after uncertainty. It loads no model and dispatches no actions.
-See the gateway walkthrough for actual paths, legacy operation-ID recovery, and result meanings.
-Use `edge-delegate-lab init-example --output NEW_DIRECTORY` to create the bundled reference
-profile from installed code; no checkout-relative example files or model weights are needed.
-For one-terminal execution use `edge-delegate-lab run --emulator-dir PRIVATE_LINUX_DIRECTORY`
-with your selected model plugin/artifact. It manages the emulator process and defaults to readable
-output. `/help`, `/reconcile REQUEST_ID`, `/cancel REQUEST_ID`, and `/quit` are available.
-For an externally managed adapter, add `--format text` for readable results; its default stays JSON.
-Use `edge-delegate-lab artifact-export --artifact ARTIFACT_DIRECTORY --output NEW_BUNDLE.zip`
-to produce a manifest-verified candidate archive and its SHA-256. It includes only listed
-adapter/tokenizer files, not training logs, credentials, unrelated files, or base-model weights.
-It does not qualify or publish the candidate. Check upstream redistribution terms before sharing.
-Recipients extract to a fresh directory, run `edge-delegate-lab artifact-verify --artifact DIRECTORY`,
-and obtain any gated base model separately. Use an artifact/version-specific bundle filename;
-existing outputs are never overwritten. Share the printed digest through a trusted channel.
-
 [Documentation home](README.md) | [Glossary](glossary.md)
+
+## Jump to your task
+
+- [Install only the dependencies you need](#install-project-dependency-groups).
+- [Type queries into a saved adapter](#workflow-8-type-queries-into-a-saved-adapter).
+- [Execute a model proposal in software](#workflow-9-model-driven-simulator-execution).
+- [Run software verification](#workflow-10-software-verification).
+- [Check review data](#check-a-dataset-v2-review-workspace).
+- [Diagnose common problems](#common-problems).
+- [Inspect packs, recover receipts or export an artifact](#additional-tooling-and-recovery-commands).
+
+The numbered workflows are independent recipes, **not a required ten-step installation**.
+Workflows 2–7 include the historical full-plan pilot. Use them to reproduce that pipeline,
+not as the current reviewed-data training or release plan. For new candidates, follow
+[review tooling](implementation-batch-1.md) and the [active data gates](roadmap.md#evidence-and-reviewed-data).
 
 ## Who this is for
 
@@ -381,6 +362,45 @@ python -m pip check
 - `make verify` runs lint and all non-hardware tests.
 - `make test-hardware` explicitly checks the configured CUDA target.
 - Hardware tests are separated so ordinary continuous integration can run without a GPU.
+
+## Additional tooling and recovery commands
+
+These are lookup commands for an already configured development environment, not steps to
+run in sequence. Replace uppercase placeholders with your own paths and identities.
+
+`edge-delegate control-demo --directory PRIVATE_DIRECTORY --text "Set the inspection light to 40%."`
+previews an exact command for two software lights. Add `--execute` to change emulator state;
+`--request-id ID` supports durable retries. No model is loaded. See [device controls](device-control.md)
+for the structured SDK, recovery, limitations, and `bash scripts/test-control.sh` automatic tests.
+
+Candidate inspection: `edge-delegate pack-check --manifest PATH` verifies candidate integrity,
+not release readiness. [Review and candidate tooling](implementation-batch-1.md) cover the public SDK,
+`bash scripts/test-numeric.sh`, review-history submissions/exports and qualification v2.
+
+`bash scripts/test-bounded.sh` tests the separate deterministic command grammar (no weights).
+For the learned-model failure trace, use `bash scripts/test-numeric.sh --include-raw-output`;
+this explicit diagnostic flag saves raw generations for the public development suite.
+
+For `edge-delegate-lab run` and the separate-process device emulator, follow the
+[gateway preview walkthrough](gateway-preview.md). Execution is explicit and experimental.
+Use `edge-delegate-lab benchmark` for persistent-session timing and `edge-delegate-lab qualify`
+to check the combined dataset, quality, and performance evidence without promoting an artifact.
+Use `edge-delegate-lab reconcile --socket SOCKET --journal JOURNAL --request-id REQUEST_ID`
+to check recorded receipts after uncertainty. It loads no model and dispatches no actions.
+See the gateway walkthrough for actual paths, legacy operation-ID recovery, and result meanings.
+Use `edge-delegate-lab init-example --output NEW_DIRECTORY` to create the bundled reference
+profile from installed code; no checkout-relative example files or model weights are needed.
+For one-terminal execution use `edge-delegate-lab run --emulator-dir PRIVATE_LINUX_DIRECTORY`
+with your selected model plugin/artifact. It manages the emulator process and defaults to readable
+output. `/help`, `/reconcile REQUEST_ID`, `/cancel REQUEST_ID`, and `/quit` are available.
+For an externally managed adapter, add `--format text` for readable results; its default stays JSON.
+Use `edge-delegate-lab artifact-export --artifact ARTIFACT_DIRECTORY --output NEW_BUNDLE.zip`
+to produce a manifest-verified candidate archive and its SHA-256. It includes only listed
+adapter/tokenizer files, not training logs, credentials, unrelated files, or base-model weights.
+It does not qualify or publish the candidate. Check upstream redistribution terms before sharing.
+Recipients extract to a fresh directory, run `edge-delegate-lab artifact-verify --artifact DIRECTORY`,
+and obtain any gated base model separately. Use an artifact/version-specific bundle filename;
+existing outputs are never overwritten. Share the printed digest through a trusted channel.
 
 ## Artifact map
 
