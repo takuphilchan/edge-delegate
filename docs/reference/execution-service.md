@@ -8,6 +8,10 @@ action is `audio.volume.set` on endpoint `output`. It does not change native aud
 
 ## Connect and call
 
+For a complete, runnable client, use the [approved-request example](../../crates/edge-client/examples/approved_request.rs)
+and [quickstart](../getting-started.md). The example is owner-run; do not give its owner credential
+to an ordinary client application.
+
 Start the host with `edge-delegate-host serve-software --directory PRIVATE_DIRECTORY`.
 The installed simulator worker must be beside the host executable. Use a dedicated private
 Linux directory; the host creates `execution.sock` and persistent enrollment files there.

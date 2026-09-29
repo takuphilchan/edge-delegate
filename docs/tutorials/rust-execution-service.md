@@ -1,6 +1,9 @@
-# Execute an approved request
+# Call the execution service from the CLI
 
 [Documentation home](../README.md) · [API reference](../reference/execution-service.md) · [Concepts](../concepts/execution.md)
+
+New to the project? Start with the [SDK quickstart](../getting-started.md). This page is the
+lower-level walkthrough for readers who want to inspect each JSON command and credential.
 
 Learn how a client previews an operation, an owner approves it, and the host records its
 execution. You will set a **software** volume endpoint to 40 percent and inspect its receipt.

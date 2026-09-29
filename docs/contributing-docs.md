@@ -5,6 +5,12 @@
 Documentation must let a reader complete a task and understand what the result proves.
 Do not make readers reconstruct the current system from a chronological development log.
 
+The primary reading path is README → getting-started → architecture → service reference.
+Do not add a new top-level onboarding route for each implementation batch. A test script is
+verification, not a substitute for showing someone how to use the API. The quickstart uses a
+compiled public-client example; its approval and decline paths are exercised by the service tests.
+Keep dated implementation narratives in history and current support in qualification-status.
+
 ## One owner for each question
 
 | Question | Authoritative page |
@@ -118,6 +124,9 @@ That script also runs the maintained service tutorial's actual enrollment, previ
 submission and status command blocks against a fresh software device, then checks its state
 and restart result. It substitutes isolated state paths and already-built binaries; it never
 uses a maintainer's credentials. The tutorial is trusted repository code, not arbitrary input.
+It also builds and runs the public Rust quickstart example. EOF, decline and malformed approval
+input must leave the software write count at zero; explicit approval must produce exactly one
+write. This checks the example, not whether an independent reader finds the documentation usable.
 
 The five marked shell blocks in try-it are consumed by scripts/documentation_checks.py.
 The runner accepts only edge-delegate control-demo commands with the one test-directory

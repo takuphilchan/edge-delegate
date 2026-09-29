@@ -110,5 +110,64 @@ def check(host: Path, cli: Path, evidence: Path) -> None:
         stop(process)
 
 
+def check_sdk_example(host: Path, example: Path, evidence: Path) -> None:
+    """Confirm that the public onboarding example changes nothing without explicit input."""
+    evidence.mkdir(mode=0o700)
+    directory = evidence / "service"
+    log = evidence / "host.log"
+    with log.open("wb") as output:
+        process = subprocess.Popen(
+            [str(host), "serve-software", "--directory", str(directory)],
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+    try:
+        until = time.monotonic() + 10
+        while "READY:" not in log.read_text(encoding="utf-8"):
+            if process.poll() is not None or time.monotonic() >= until:
+                raise RuntimeError("SDK quickstart host did not become ready")
+            time.sleep(0.02)
+        for answer, expected_writes in (
+            ("", 0),
+            ("\n", 0),
+            ("approve extra\n", 0),
+            ("approve\n", 1),
+        ):
+            result = subprocess.run(
+                [str(example), str(directory)],
+                input=answer,
+                text=True,
+                capture_output=True,
+                check=True,
+                timeout=15,
+            )
+            assert "Preview (no action executed):" in result.stdout
+            expected = (
+                "Succeeded: simulated output is 40%; receipt recorded."
+                if expected_writes
+                else ("Not submitted. No device action was requested.")
+            )
+            assert expected in result.stdout
+            with sqlite3.connect(
+                f"file:{directory / 'authority/device.sqlite'}?mode=ro", uri=True
+            ) as db:
+                assert db.execute("SELECT writes FROM state").fetchone() == (expected_writes,)
+        print(
+            "PASS: SDK quickstart; EOF/decline/invalid confirmation do not write; explicit approval writes once."
+        )
+        print(f"Private quickstart state retained at {evidence}; do not share credentials.")
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+
+
 if __name__ == "__main__":
-    check(*(Path(arg).resolve() for arg in sys.argv[1:]))
+    host, cli, evidence, *examples = (Path(arg).resolve() for arg in sys.argv[1:])
+    check(host, cli, evidence)
+    if examples:
+        check_sdk_example(host, examples[0], evidence.parent / "sdk-quickstart")

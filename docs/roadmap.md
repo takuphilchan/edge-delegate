@@ -101,7 +101,8 @@ The owner has now clarified that physical test devices are not available. Contin
 emulator, packaging and fault testing without procurement. Native/mobile and physical effect
 qualification remain blocked on access; WSL does not substitute for them. The near-term
 deliverable is a software developer preview, not a five-platform production certificate.
-Do not invent that evidence or claim native CI jobs already passed.
+Portable desktop CI jobs have passed; see [recorded build coverage](qualification-status.md#platform-coverage).
+Those jobs do not establish native controls or physical qualification. Do not invent that evidence.
 
 No purchases, paid infrastructure, signing identity creation, public publication, fabricated
 review approvals or automatic model promotion. Preserve unresolved journals. Keep one

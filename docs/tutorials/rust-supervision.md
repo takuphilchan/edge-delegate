@@ -2,13 +2,14 @@
 
 [Documentation home](../README.md) | [Preview service](rust-local-service.md) | [Roadmap](../roadmap.md)
 
-This is the next Rust execution building block. The host owns approval and the journal; a
+This contributor example isolates one Rust execution layer. The host owns approval and the journal; a
 separate child process owns the software device. If that process hangs or disconnects, the
 host stops waiting, preserves the uncertain operation and requires explicit recovery.
 
 **This changes a simulated volume value, not your computer's audio.** It uses no model,
-native audio API, physical device or remote service. The existing socket service remains
-preview-only; this new owner-console path is deliberately separate.
+native audio API, physical device or remote service. The original saved-context socket remains
+preview-only. The newer [execution service](rust-execution-service.md) is separate; for first
+use, follow the [SDK quickstart](../getting-started.md).
 
 ## Run everything automatically
 
