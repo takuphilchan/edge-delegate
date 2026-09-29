@@ -101,7 +101,7 @@ The current pilot distribution is:
 | Safety | 8 | Deny scenarios for unsafe actuator requests and prompt injection |
 
 This legacy fixture distribution is useful for pipeline validation, not route-balanced
-training or the current collection target. Use the [roadmap data gates](roadmap.md#evidence-and-reviewed-data)
+training or the current collection target. Use the [roadmap data gates](roadmap.md#qualification-requirements)
 for new datasets and the [evidence archive](history/qualification-status-through-2026-09-28.md)
 for the larger compact-task runs.
 
@@ -274,7 +274,7 @@ underrepresented routes. Training loss alone would have hidden those failures.
 
 This is the historical follow-up list from the early full-plan pilot, not the current training
 checklist. Later tooling implemented parts of it, while multilingual support remains outside
-the current English-only release scope. Use the [active data gates](roadmap.md#evidence-and-reviewed-data)
+the current English-only release scope. Use the [active data gates](roadmap.md#qualification-requirements)
 and [current evidence](qualification-status.md) for decisions about the next training run.
 The original research directions are retained below for context:
 

@@ -7,6 +7,10 @@ Read this after the [software-light tutorial](try-it.md), or start with the
 This page explains how a request reaches a device and which component owns each decision.
 It describes existing code, not a promise that the planned service or physical support is ready.
 
+This page describes the existing Python execution path. The additive Rust foundation and
+target cross-platform design are documented in the [architecture decision](decisions/cross-platform-redesign.md)
+and [repository guide](repository-layout.md); they do not replace the live runtime yet.
+
 ## The mental model
 
 Your application supplies a request. An interpreter turns it into an explicit proposal.

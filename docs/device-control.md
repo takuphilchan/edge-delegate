@@ -91,4 +91,4 @@ Currently there is one endpoint per device, one target per request, sequential a
 and short operations only. This batch does not add a supervised service, whole-request
 deadlines, arbitrary parameter types, jobs, logger/display extensions, automations, model training,
 generalized task packs, or physical support. The 500 ms execution-step limit remains.
-See the [roadmap](roadmap.md#expanded-device-control-delivery) for the next milestones.
+See the [roadmap](roadmap.md#delivery-order-and-exit-gates) for the next milestones.

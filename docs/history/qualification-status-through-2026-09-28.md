@@ -28,7 +28,7 @@ No production timing, physical effect, independent language-quality, or soak qua
 performed for this batch. Manual CLI output from temporary storage is not a performance claim.
 Supervisor/service, whole-request deadlines, generalized production packs, trained control models,
 jobs/automation, and physical qualification remain pending. See [control usage](../device-control.md)
-and the [expanded roadmap](../roadmap.md#expanded-device-control-delivery).
+and the [expanded roadmap](roadmap-through-2026-09-29.md#expanded-device-control-delivery).
 
 ## Numeric failure diagnosis and deterministic baseline
 

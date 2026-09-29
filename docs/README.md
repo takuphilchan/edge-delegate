@@ -7,6 +7,21 @@ tests that model. These are related parts, not three names for the same thing.
 If that purpose is still unclear, start with the [project overview](../README.md).
 You do not need a model, hardware or a training run to try the system.
 
+Working on the cross-platform redesign? Start with the [repository layout](repository-layout.md)
+and [Rust foundation tutorial](tutorials/rust-foundation.md). The [roadmap](roadmap.md)
+distinguishes implemented foundations from the future host, companion app and relay.
+The [Rust recovery tutorial](tutorials/rust-recovery.md) adds software-only approval,
+execution, lost-acknowledgement and restart tests without changing native device state.
+To exercise a separate host and public client, use the [Rust local-service tutorial](tutorials/rust-local-service.md).
+That service authenticates inspection only; it cannot approve or execute actions.
+The [supervised software session](tutorials/rust-supervision.md) adds an owner console and
+child-process fault tests without exposing execution on that socket.
+For scoped client permissions, queued requests and in-flight cancellation, run the
+[software authority diagnostic](tutorials/rust-authority.md). It requires no manual queries.
+To call that authority through authenticated IPC, use the
+[execution-service tutorial](tutorials/rust-execution-service.md): client enrollment, separate
+owner confirmation, submission, durable status and revocation. Software actions only.
+
 ## New here? Follow this path
 
 1. **See it work:** [Control two software lights](try-it.md). Install the core, preview a

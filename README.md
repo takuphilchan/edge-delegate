@@ -12,6 +12,24 @@ as permission to act. The current project includes a working software-device run
 separate model-training and evaluation lab. It is experimental, not a production-ready
 controller for arbitrary hardware.
 
+The approved next architecture adds a Rust execution core and a desktop/mobile companion
+for Windows, Linux, macOS, Android and iOS. That redesign is **in progress**, not available
+as a complete product. Rust now provides strict preview contracts plus an experimental
+software-only execution/recovery library. See the [delivery roadmap](docs/roadmap.md),
+[repository layout](docs/repository-layout.md) and [Rust recovery tutorial](docs/tutorials/rust-recovery.md).
+There is also a Linux/WSL [local preview host and Rust client](docs/tutorials/rust-local-service.md):
+authenticate, inspect a saved catalog and preview a request, without device execution.
+The separate [supervised software session](docs/tutorials/rust-supervision.md) adds exact
+preview confirmation, a child-process adapter and receipt-based recovery after hangs/crashes.
+The [scoped authority diagnostic](docs/tutorials/rust-authority.md) adds separate owner/client
+handles, durable admission, bounded queueing and cancellation. It is an in-process software
+test. The new [authenticated execution service](docs/tutorials/rust-execution-service.md)
+exposes that software authority through a separate socket, public Rust client and CLI, with
+persistent client enrollment and separate owner approval. Interrupted requests remain
+inspectable and never resume automatically.
+Existing Python commands
+and trained artifacts retain their current behavior.
+
 ## Why this exists
 
 Understanding “turn the inspection light on” is only one part of controlling a device.
@@ -35,8 +53,9 @@ Today, you can use the software integrations to develop and test those applicati
 implementing and qualifying a physical adapter.
 
 Here, **edge** means running the application near the devices, on a local host or gateway.
-It does not mean the model already runs inside a microcontroller. The core is Python;
-model inference is optional and has separate compute requirements.
+It does not mean the model already runs inside a microcontroller. The current execution
+runtime is Python; the new Rust path executes only the software reference adapter.
+Model inference is optional and has separate compute requirements.
 
 If you only need a few fixed buttons calling a known driver, direct application code may be
 simpler. Edge Delegate becomes useful when you need a shared boundary for request interpretation,
@@ -83,6 +102,7 @@ for the complete request path.
 | Path | Available now | Boundary |
 | --- | --- | --- |
 | Python control interface | Explicitly target software lights; read/set power and brightness | One target per request; no model required |
+| Rust execution service | Authenticate, preview, obtain owner approval, submit, inspect, cancel and reconcile | Linux/WSL software volume endpoint only; no native audio changes |
 | Exact text commands | Recognize the documented light commands and a separate temperature/display grammar | Fixed vocabulary, not general language understanding |
 | Local-model lab | Train and test planners for reading temperature, displaying a number, and reading then displaying temperature | Existing learned candidates have known quality failures |
 | Device integration interfaces | Installed catalogs and adapters; software light, Unix-socket and independent counter examples | New physical integrations need implementation and qualification |
@@ -92,8 +112,8 @@ They share runtime foundations, but the existing temperature model has not learn
 controls. Adding a driver does not automatically teach a model new actions.
 
 External-model delegation is a future direction, not a working fallback. Voice processing,
-microcontroller inference, background jobs/rules and a supervised request service are also
-outside the current implementation. No physical integration is production-qualified.
+microcontroller inference and background jobs/rules are also outside the current implementation.
+The new Rust service executes only its software reference action. No physical integration is production-qualified.
 See [current evidence and blockers](docs/qualification-status.md), not demo success alone,
 when assessing adoption.
 

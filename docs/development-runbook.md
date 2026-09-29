@@ -12,6 +12,8 @@ The [command inventory](reference/cli.md) is checked against the actual parsers.
 - [Type queries into a saved adapter](#workflow-8-type-queries-into-a-saved-adapter).
 - [Execute a model proposal in software](#workflow-9-model-driven-simulator-execution).
 - [Run software verification](#workflow-10-software-verification).
+- [Run the Rust scoped authority diagnostic](tutorials/rust-authority.md).
+- [Test authenticated Rust execution through the real CLI](tutorials/rust-execution-service.md).
 - [Check review data](#check-a-dataset-v2-review-workspace).
 - [Diagnose common problems](#common-problems).
 - [Inspect packs, recover receipts or export an artifact](#additional-tooling-and-recovery-commands).
@@ -19,7 +21,7 @@ The [command inventory](reference/cli.md) is checked against the actual parsers.
 The numbered workflows are independent recipes, **not a required ten-step installation**.
 Workflows 2–7 include the historical full-plan pilot. Use them to reproduce that pipeline,
 not as the current reviewed-data training or release plan. For new candidates, follow
-[review tooling](implementation-batch-1.md) and the [active data gates](roadmap.md#evidence-and-reviewed-data).
+[review tooling](implementation-batch-1.md) and the [active data gates](roadmap.md#qualification-requirements).
 
 ## Who this is for
 
