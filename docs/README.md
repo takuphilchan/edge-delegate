@@ -1,92 +1,87 @@
-# Find your way through Edge Delegate
+# Edge Delegate documentation
 
-Edge Delegate connects requests to configured device operations. The runtime decides what may
-execute and tracks outcomes; an optional model helps interpret language; the lab develops and
-tests that model. These are related parts, not three names for the same thing.
+Build applications that submit supported requests through a local permission and execution
+boundary. Start with one integration below; you do not need to read the entire documentation set.
+For the product's purpose and limits, see the [project overview](../README.md).
 
-If that purpose is still unclear, start with the [project overview](../README.md).
-You do not need a model, hardware or a training run to try the system.
+## Get started
 
-Working on the cross-platform redesign? Start with the [repository layout](repository-layout.md)
-and [Rust foundation tutorial](tutorials/rust-foundation.md). The [roadmap](roadmap.md)
-distinguishes implemented foundations from the future host, companion app and relay.
-The [Rust recovery tutorial](tutorials/rust-recovery.md) adds software-only approval,
-execution, lost-acknowledgement and restart tests without changing native device state.
-To exercise a separate host and public client, use the [Rust local-service tutorial](tutorials/rust-local-service.md).
-That service authenticates inspection only; it cannot approve or execute actions.
-The [supervised software session](tutorials/rust-supervision.md) adds an owner console and
-child-process fault tests without exposing execution on that socket.
-For scoped client permissions, queued requests and in-flight cancellation, run the
-[software authority diagnostic](tutorials/rust-authority.md). It requires no manual queries.
-To call that authority through authenticated IPC, use the
-[execution-service tutorial](tutorials/rust-execution-service.md): client enrollment, separate
-owner confirmation, submission, durable status and revocation. Software actions only.
-
-## New here? Follow this path
-
-1. **See it work:** [Control two software lights](try-it.md). Install the core, preview a
-   request, execute it, and see ambiguity and retries handled. No model or board is needed.
-2. **Understand what happened:** [Architecture](system-architecture.md). Follow that same
-   request through interpretation, checks, execution and recorded results.
-3. **Choose what to build:** use one of the paths below. Stop when you have what you need;
-   the reference pages are for lookup, not required reading in order.
-
-## Choose your goal
-
-| I want to… | Start here | What I should have afterwards |
+| Your goal | Follow this tutorial | What you will finish with |
 | --- | --- | --- |
-| Call controls from my Python application | [Control SDK example](reference/control-sdk.md#small-complete-example) | A typed request that previews and executes against a software device |
-| See which light phrases work | [Command guide](device-control.md#supported-exact-commands) | The exact supported vocabulary and parameter limits |
-| Try a trained model | [Model tutorial](model-tutorial.md) | A compatible artifact loaded for preview, then optional software execution |
-| Add a device or task | [Integration guide](extensions.md) | An understanding of the adapter/catalog work and required conformance tests |
-| Improve a model's decisions | [Model lifecycle](model-lifecycle.md) | The relationship between reviewed labels, training, candidate selection and outcome tests |
-| Recover after an uncertain result | [Reconciliation guide](how-to/reconcile.md) | A receipt-inspection procedure that does not blindly repeat a write |
-| Decide whether I can deploy this | [Current status](qualification-status.md) | Implemented capabilities, known failures and missing qualification evidence |
+| Use the new authenticated Rust service | [Execute an approved request](tutorials/rust-execution-service.md) | A scoped client, a separately approved software write, and a durable result |
+| Try the existing Python device controls | [Control two software lights](try-it.md) | A preview, a targeted change, ambiguity handling and receipt replay |
+| Test a trained planner | [Run a local model](model-tutorial.md) | Model-generated plans for temperature/display tasks |
 
-SDK means software development kit: the Python interfaces you call from your own application.
-A device adapter implements operations; a model adapter contains learned changes to model weights.
-They solve different problems.
+The first two paths need no model or physical hardware. The model path has separate artifact
+and compute requirements. The Rust service changes software volume state only; Python light
+controls do not use the trained temperature model.
 
-## Do not accidentally switch experiments
+## Build an application
 
-The software-light tutorial uses structured requests and exact command parsing.
-The learned-model tutorial uses the separate temperature/display task catalog.
-The model has not learned lights merely because the light demonstration works.
+- **Rust:** [Execution-service reference](reference/execution-service.md) for authentication,
+  methods, scopes, results and limits. Start with structured requests; no interpretation worker
+  is attached to this service.
+- **Python:** [Control SDK reference](reference/control-sdk.md) for the existing in-process
+  device runtime. This is not a Python client for the Rust socket service.
+- **Device integration:** [Adapter and task guide](extensions.md) for the existing Python
+  extension interfaces and conformance expectations.
 
-Preview means no device action is dispatched. Simulation can execute actions, but only against
-software state. Confirmed execution means the proposed operation completed; it is not proof
-that a model understood the user correctly or that a physical effect was independently observed.
+Python/TypeScript clients for the Rust service, native platform adapters and the companion
+application are planned. Do not import private host internals as substitutes for public clients.
 
-## Reference: use when you need a detail
+## Understand execution
 
-- [Python control interface](reference/control-sdk.md): construction, lifecycle, methods and exceptions.
-- [Command inventory](reference/cli.md): implemented commands, generated from the parsers.
-- [Results](reference/results.md): routes, statuses, receipt replay and exit codes.
-- [Glossary](glossary.md): unfamiliar terms and acronyms.
-- [Contracts and safety](contracts-and-safety.md): arguments, permissions, approvals and recovery limits.
-- [Model plugins and compute](model-plugins-and-compute.md): model isolation, artifacts and inference settings.
-- [Schemas](../schemas/) and [specifications](../specs/): wire formats and intended invariants.
-  A draft specification is not proof of an implemented feature.
+- [Execution concepts](concepts/execution.md): permission, approval, dispatch and uncertainty.
+- [Python architecture](system-architecture.md): the current Python request path.
+- [Repository layout](repository-layout.md): component ownership and migration rules.
+- [Glossary](glossary.md): terms used in code, reports and training.
 
-## Development and advanced workflows
+## Operate and troubleshoot
 
-The [development runbook](development-runbook.md) is a task reference, not a sequence that
-every user must run. It includes environment setup, diagnostics, historical pilot recipes and
-review commands. The [gateway guide](gateway-preview.md) explains persistent temperature
-sessions and the separate-process software device once you have chosen a planner.
+- [Rust service troubleshooting](tutorials/rust-execution-service.md#troubleshooting): startup,
+  credential, approval and submission failures.
+- [Rust results and recovery](reference/execution-service.md#results-and-recovery):
+  interpret durable records without replaying uncertain writes.
+- [Rust security and storage](reference/execution-service.md#security-and-storage):
+  credentials, revocation, retained evidence and unfinished operational features.
+- [Python reconciliation](how-to/reconcile.md): inspect receipts for existing Python sessions.
+- [Python command inventory](reference/cli.md) and [result reference](reference/results.md):
+  look up implemented Python commands and statuses.
 
-For dataset work, use [review and candidate tooling](implementation-batch-1.md).
-The old filename is retained for compatibility; it is not a second roadmap. Structural checks
-do not approve human labels, and an example training recipe is not approval to promote a model.
+## Develop and evaluate models
 
-## Plans, evidence and history
+The lab is separate from the execution service. Model quality and runtime authorization are
+different requirements: passing permission checks does not establish that a model understood a request.
 
-- [Current status](qualification-status.md): what is implemented and what has actually been measured.
-- [Roadmap](roadmap.md): the single active delivery sequence and release gates.
-- [Release contract](release-contract.md): intended scope, trust assumptions and support requirements.
-- [Reference-device proposal](reference-device.md): proposed hardware, not a purchase or support claim.
-- [Historical results](history/qualification-status-through-2026-09-28.md) and
-  [historical roadmap](history/roadmap-through-2026-09-28.md): background, not onboarding instructions.
+1. [Model lifecycle](model-lifecycle.md): data, training, candidate selection and evaluation.
+2. [Review and candidate tooling](implementation-batch-1.md): independent labels and export gates.
+3. [Model plugins and compute](model-plugins-and-compute.md): compatibility and inference settings.
+4. [Gateway preview](gateway-preview.md): Python temperature/display sessions and emulator operation.
 
-If a page leaves you unsure what to do next, that is a documentation defect.
-The [maintenance guide](contributing-docs.md) explains how to improve and verify these pages.
+## Contribute and inspect evidence
+
+- [Development runbook](development-runbook.md): task-specific setup and checks.
+- [Documentation standard](contributing-docs.md): writing, examples and drift checks.
+- [Qualification status](qualification-status.md): dated measurements and known gaps.
+- [Roadmap](roadmap.md): the single active implementation sequence.
+- [Release contract](release-contract.md): target scope and acceptance gates.
+- [Architecture decision](decisions/cross-platform-redesign.md): the planned cross-platform product.
+
+**Implemented** means code exists. **Experimental** means its interface or deployment is not
+supported as a production release. **Qualified** requires matching evidence for a named
+configuration. **Planned** means unavailable. These labels are not interchangeable.
+
+## Advanced implementation examples
+
+These explain individual Rust layers; they are not prerequisites for the service tutorial:
+
+| Example | Boundary it exercises |
+| --- | --- |
+| [Foundation](tutorials/rust-foundation.md) | Strict contracts and offline preview |
+| [Preview host](tutorials/rust-local-service.md) | Authenticated saved-context inspection; no execution |
+| [Recovery](tutorials/rust-recovery.md) | Durable operation records and receipt reconciliation |
+| [Supervision](tutorials/rust-supervision.md) | Child-process faults and owner-console confirmation |
+| [Authority](tutorials/rust-authority.md) | Scoped in-process handles, admission and cancellation |
+
+Historical measurements and superseded plans remain in [history](history/). They explain prior
+decisions; they are not current installation instructions or evidence of supported deployment.

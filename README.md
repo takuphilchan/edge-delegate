@@ -1,155 +1,117 @@
 # Edge Delegate
 
-**Build local applications that turn requests into controlled device operations.**
+**Local execution infrastructure for applications that control devices.**
 
-Edge Delegate is a developer toolkit for connecting application commands and local models to
-devices. You define the operations a device supports. Edge Delegate turns a request into an
-explicit plan, checks it against the device's capabilities and your permissions, and records
-what happened when it executes.
+Edge Delegate sits between a request and the code that changes a device. It turns supported
+requests into explicit plans, checks permissions, requires approval where configured, and
+keeps a durable record of execution. If a connection breaks after an action may have happened,
+it preserves that uncertainty so an application can investigate instead of blindly repeating it.
 
-The goal is to make language-driven device control useful without treating a model's output
-as permission to act. The current project includes a working software-device runtime and a
-separate model-training and evaluation lab. It is experimental, not a production-ready
-controller for arbitrary hardware.
+Use it to build a control interface with a shared permission and recovery boundary. A model
+can propose an action, but it cannot grant itself permission to execute. **No model is required.**
 
-The approved next architecture adds a Rust execution core and a desktop/mobile companion
-for Windows, Linux, macOS, Android and iOS. That redesign is **in progress**, not available
-as a complete product. Rust now provides strict preview contracts plus an experimental
-software-only execution/recovery library. See the [delivery roadmap](docs/roadmap.md),
-[repository layout](docs/repository-layout.md) and [Rust recovery tutorial](docs/tutorials/rust-recovery.md).
-There is also a Linux/WSL [local preview host and Rust client](docs/tutorials/rust-local-service.md):
-authenticate, inspect a saved catalog and preview a request, without device execution.
-The separate [supervised software session](docs/tutorials/rust-supervision.md) adds exact
-preview confirmation, a child-process adapter and receipt-based recovery after hangs/crashes.
-The [scoped authority diagnostic](docs/tutorials/rust-authority.md) adds separate owner/client
-handles, durable admission, bounded queueing and cancellation. It is an in-process software
-test. The new [authenticated execution service](docs/tutorials/rust-execution-service.md)
-exposes that software authority through a separate socket, public Rust client and CLI, with
-persistent client enrollment and separate owner approval. Interrupted requests remain
-inspectable and never resume automatically.
-Existing Python commands
-and trained artifacts retain their current behavior.
+**Status: experimental developer software.** The Rust service currently controls one software
+volume endpoint on Linux/WSL. It does not change your computer's audio. Native computer/phone
+controls, a companion application and remote pairing are planned, not available products.
+No physical integration or production deployment is qualified.
 
-## Why this exists
+[Get started](docs/tutorials/rust-execution-service.md) ·
+[Documentation](docs/README.md) ·
+[Current status](docs/qualification-status.md) ·
+[Roadmap](docs/roadmap.md)
 
-Understanding “turn the inspection light on” is only one part of controlling a device.
-An application also needs to answer:
+## What it does
 
-- Which light did the user mean?
-- Is this action supported and allowed?
-- Are the arguments valid for that device?
-- Did the action finish, fail, or finish without its acknowledgement reaching us?
-- Would retrying repeat an operation that already happened?
+For a request to set an output to 40 percent, the Rust service provides this sequence:
 
-Edge Delegate provides a common place to handle those questions. A model can help interpret
-a request; explicit code checks and carries out the resulting operations. When an outcome
-is uncertain, the runtime records that uncertainty instead of assuming the action never happened.
+```text
+Client previews a request
+  → owner approves the exact target and value
+  → client submits the approved request
+  → host records and executes the operation
+  → client inspects the result or reconciles uncertainty
+```
 
-## Who it is for
+Preview does not execute. Enrollment gives a client a scope, not permission to approve itself.
+The execution host checks the approval and current state before dispatch. Recorded results
+survive a restart; unfinished work does not automatically resume.
 
-The intended users are developers building local interfaces for sensors, displays and device
-controls—for example, an equipment-status console or an embedded-system gateway.
-Today, you can use the software integrations to develop and test those applications before
-implementing and qualifying a physical adapter.
+This is execution infrastructure, not a general-purpose computer-use agent. It does not generate
+shell commands, click arbitrary screens, or discover unrestricted actions. Installed code
+defines what the system can do.
 
-Here, **edge** means running the application near the devices, on a local host or gateway.
-It does not mean the model already runs inside a microcontroller. The current execution
-runtime is Python; the new Rust path executes only the software reference adapter.
-Model inference is optional and has separate compute requirements.
+## Try the execution service
 
-If you only need a few fixed buttons calling a known driver, direct application code may be
-simpler. Edge Delegate becomes useful when you need a shared boundary for request interpretation,
-device permissions, execution records and recovery.
+You need Linux or Ubuntu under Windows Subsystem for Linux (WSL), Rust with Cargo, a C compiler
+and Python 3 for the test driver. Run from a checkout of this repository. The repository pins
+Rust 1.90.0; a first build needs access to download the toolchain and dependencies.
 
-## One example
+```bash
+bash scripts/test-rust-execution.sh
+```
 
-The included demonstration has two software lights: workbench and inspection.
+This starts a real host and CLI client against the software adapter. It checks separate
+client/owner credentials, rejected self-approval, one approved write, retry, restart and
+revocation. It stops the host it started and prints the path to a retained report.
 
-A request to **“Set the inspection light to 40 percent.”** selects the inspection light,
-proposes a brightness value of 40, checks that operation, and changes only that light's
-software state when execution is explicitly requested. Brightness does not turn its power on.
+Success ends with `PASS: exactly one recorded software write.` No model, GPU, physical device
+or external service is used at runtime. The evidence directory contains private credentials;
+do not upload it wholesale. The test program supplies approval for its own fixture, not
+independent human consent.
 
-**“Turn the light on.”** is ambiguous because both devices have the alias light. The demo
-asks which one rather than choosing. Retrying an identical completed request with the same
-request ID returns its recorded result rather than issuing a second operation.
+For prerequisites, manual operation and troubleshooting, follow the
+[execution-service tutorial](docs/tutorials/rust-execution-service.md).
 
-This example uses an exact command parser, **not a trained model**. Lights are a reference
-integration for exercising targeting and execution—not the limit of the project's intended use.
+## Choose an integration
 
-## How the pieces fit together
+The repository has three distinct paths. They are not interchangeable implementations of
+every capability.
 
-There are three responsibilities:
-
-1. **Interpret the request.** Application code can supply an explicit device/action/value.
-   A command parser or compatible local model can translate supported text into a proposal.
-2. **Check and execute it.** The runtime checks arguments, device state and permissions,
-   then uses a device adapter to perform the operation. An adapter is the code connecting
-   the runtime to a software device or physical transport.
-3. **Improve and measure model behavior.** The lab prepares datasets, fine-tunes compatible
-   models and tests whether proposals actually produce the intended outcomes.
-
-The proposal is called **Plan IR**—Plan Intermediate Representation. It is structured data,
-not generated Python. The durable operation journal is the runtime's record of attempted
-operations and their outcomes. These are implementation tools; the purpose is controlled,
-inspectable device execution.
-
-Training changes how a model interprets requests. It does not create device drivers,
-grant permissions or guarantee correct intent. See the [architecture](docs/system-architecture.md)
-for the complete request path.
-
-## What you can use today
-
-| Path | Available now | Boundary |
+| Path | Use it for | Start here |
 | --- | --- | --- |
-| Python control interface | Explicitly target software lights; read/set power and brightness | One target per request; no model required |
-| Rust execution service | Authenticate, preview, obtain owner approval, submit, inspect, cancel and reconcile | Linux/WSL software volume endpoint only; no native audio changes |
-| Exact text commands | Recognize the documented light commands and a separate temperature/display grammar | Fixed vocabulary, not general language understanding |
-| Local-model lab | Train and test planners for reading temperature, displaying a number, and reading then displaying temperature | Existing learned candidates have known quality failures |
-| Device integration interfaces | Installed catalogs and adapters; software light, Unix-socket and independent counter examples | New physical integrations need implementation and qualification |
+| Rust execution service | Authenticated local clients, separate owner approval, durable software execution and recovery | [Service tutorial](docs/tutorials/rust-execution-service.md) and [API reference](docs/reference/execution-service.md) |
+| Python device runtime | Structured controls and exact commands for the existing software lights and device examples | [Software-light tutorial](docs/try-it.md) and [Python SDK](docs/reference/control-sdk.md) |
+| Python model lab | Training and evaluating optional planners for the temperature/display catalog | [Model tutorial](docs/model-tutorial.md) |
 
-**The light-control and trained-model examples are not yet one learned-control product.**
-They share runtime foundations, but the existing temperature model has not learned light
-controls. Adding a driver does not automatically teach a model new actions.
+SDK means software development kit: the interfaces an application calls. A device adapter is
+installed code that implements operations. A model adapter is learned weights; training one
+does not create device drivers or expand permissions.
 
-External-model delegation is a future direction, not a working fallback. Voice processing,
-microcontroller inference and background jobs/rules are also outside the current implementation.
-The new Rust service executes only its software reference action. No physical integration is production-qualified.
-See [current evidence and blockers](docs/qualification-status.md), not demo success alone,
-when assessing adoption.
+The existing temperature model has not learned light, phone or application controls. Its known
+quality failures are recorded in [qualification status](docs/qualification-status.md).
+External-model delegation, voice processing and microcontroller inference are not implemented.
 
-## Try it
+## Understand the design
 
-Start with [Control two software lights](docs/try-it.md). You need Python 3.12 or newer,
-Linux or Ubuntu under Windows Subsystem for Linux (WSL), and this repository.
-No GPU, model download, account or physical board is needed.
+- [Execution concepts](docs/concepts/execution.md): requests, permissions, approval and recovery.
+- [Repository layout](docs/repository-layout.md): Rust runtime boundaries and the separate Python lab.
+- [Python architecture](docs/system-architecture.md): the existing device-runtime request path.
+- [Release contract](docs/release-contract.md): intended support boundaries and qualification gates.
 
-The tutorial covers installation, a preview, an explicit state change, ambiguity and retry.
-It explains the expected result after each command and how to recognize common problems.
+If a few fixed buttons calling a known driver solve your problem, direct application code may
+be simpler. Edge Delegate is useful when multiple callers need consistent checks, execution
+records and recovery behavior.
 
-After that, choose your goal:
+## Contribute
 
-- **Build an application:** [public Python interface](docs/reference/control-sdk.md).
-- **Connect another device:** [integration guide](docs/extensions.md).
-- **Test a local model:** [model tutorial](docs/model-tutorial.md).
-- **Understand failures:** [results](docs/reference/results.md) and [recovery](docs/how-to/reconcile.md).
-- **Contribute:** [development runbook](docs/development-runbook.md) and [roadmap](docs/roadmap.md).
+From the repository root:
 
-The [documentation guide](docs/README.md) gives a reading path for each goal.
-You do not need to read every document to get started.
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+```
 
-## Development checks
+For Python work, activate your development environment, then run:
 
-From an activated Python environment at the repository root:
-
-~~~bash
+```bash
 python -m pip install -e ".[dev]"
 python -m pytest -q
 python -m ruff check .
-~~~
+```
 
-The normal suite excludes hardware-marked tests. Clean-wheel acceptance also runs the documented
-no-model examples outside the checkout. These checks verify software behavior, not model
-accuracy or physical reliability.
+The normal Python suite excludes hardware-marked tests. Passing software tests is not evidence
+of model accuracy or physical reliability. See the [development runbook](docs/development-runbook.md)
+and [documentation standard](docs/contributing-docs.md).
 
-Project-owned code is [MIT licensed](LICENSE). Model weights have their own licenses and access
-requirements.
+Project-owned code is [MIT licensed](LICENSE). Models and dependencies retain their own licenses.

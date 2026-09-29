@@ -1,9 +1,10 @@
-# Control SDK reference
+# Python control SDK reference
 
 [Documentation home](../README.md) | [Tutorial](../try-it.md) | [Architecture](../system-architecture.md)
 
 The software development kit (SDK) is a synchronous, experimental Python API. It does not load
 a model, run a service or control physical lights by itself.
+For the separate Rust host/client interface, use the [execution-service reference](execution-service.md).
 
 Use this page when you want to replace the demonstration's terminal commands with calls from
 your own program. Start with the [complete example below](#small-complete-example), then look

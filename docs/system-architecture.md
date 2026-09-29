@@ -1,15 +1,16 @@
-# System architecture
+# Python device-runtime architecture
 
 [Documentation home](README.md) | [Terms](glossary.md) | [Current status](qualification-status.md)
 
 Read this after the [software-light tutorial](try-it.md), or start with the
 [project purpose](../README.md) if you have not used the system yet.
 This page explains how a request reaches a device and which component owns each decision.
-It describes existing code, not a promise that the planned service or physical support is ready.
+It describes existing Python code, not native-device or production qualification.
 
-This page describes the existing Python execution path. The additive Rust foundation and
-target cross-platform design are documented in the [architecture decision](decisions/cross-platform-redesign.md)
-and [repository guide](repository-layout.md); they do not replace the live runtime yet.
+For the Rust service, read [execution concepts](concepts/execution.md) and the
+[service reference](reference/execution-service.md). The two APIs coexist; they do not share
+wire formats or live journals. The [repository guide](repository-layout.md) explains ownership
+and the [architecture decision](decisions/cross-platform-redesign.md) describes the target design.
 
 ## The mental model
 

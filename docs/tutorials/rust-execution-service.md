@@ -1,44 +1,52 @@
-# Submit an approved request through the local execution service
+# Execute an approved request
 
-[Documentation home](../README.md) | [Authority internals](rust-authority.md) | [Current evidence](../qualification-status.md)
+[Documentation home](../README.md) · [API reference](../reference/execution-service.md) · [Concepts](../concepts/execution.md)
 
-This is the authenticated **software execution service**, not another model demonstration.
-A client previews a request, the owner confirms its exact plan, and the client submits it.
-The host authenticates each connection, checks the enrolled client's permissions and sends
-accepted work through the existing durable authority. A client cannot approve itself.
+Learn how a client previews an operation, an owner approves it, and the host records its
+execution. You will set a **software** volume endpoint to 40 percent and inspect its receipt.
+Your computer's audio does not change. No model, GPU, physical device or runtime cloud connection
+is involved.
 
-**Current scope:** Linux/WSL, one simulated output-volume endpoint, no native audio changes,
-physical device, model or cloud call. Windows/macOS/mobile execution transports, native
-adapters, application UI, Python/TypeScript clients and production qualification are pending.
+This tutorial covers the experimental Linux/WSL service. It is not an installation guide for
+a production daemon or a cross-platform companion app.
+
+## Before you start
+
+Use a Linux terminal or Ubuntu under Windows Subsystem for Linux (WSL), not Windows Git Bash.
+You need:
+
+- A checkout of this repository, with your terminal at its root.
+- Rust/Cargo available through rustup; the checkout pins Rust 1.90.0.
+- A C compiler and linker for bundled SQLite.
+- Python 3 for the diagnostic and JSON preparation.
+- A private directory on the Linux filesystem for sockets and state, not `/mnt/d`.
+
+Check the tools with `cargo --version`, `cc --version` and `python3 --version`.
+If rustup is installed but Cargo is not found, run `source "$HOME/.cargo/env"`.
+The first build downloads dependencies; subsequent runtime calls are local.
 
 ## Test the complete flow automatically
 
-From the repository in Linux/WSL:
+Run this first:
 
 ```bash
-source "$HOME/.cargo/env"
 bash scripts/test-rust-execution.sh
 ```
 
-No queries, copied IDs or manual confirmations are needed for this diagnostic. It:
+The diagnostic builds the binaries, runs service tests, then drives the actual host and CLI
+through enrollment, rejected self-approval, owner confirmation, submission, retry, restart
+and revocation. The test program approves its own fixture; this is not independent human consent.
 
-1. Runs socket authorization, framing, cancellation and recovery tests.
-2. Starts the real `edge-delegate-host` executable and enrolls a scoped client.
-3. Uses `edgectl` to preview a software volume change to 40 percent.
-4. Checks that unapproved submission and client self-approval are rejected.
-5. Confirms the exact plan **as test-owner code**, then submits as the client.
-6. Checks durable status, same-ID retry and exactly one recorded software write.
-7. Restarts the host: credentials/results survive, but old approvals cannot resume work.
-8. Revokes the client and proves the credential stays rejected after another restart.
+**Success checkpoint:** output includes `PASS: exactly one recorded software write.` and a
+report path. The script stops the host processes it started and preserves the evidence.
+The directory also contains private credentials: do not upload or share it wholesale.
 
-The script prints `report.json` and preserves its evidence directory. It terminates only
-the host processes it started. The directory also contains **private credentials and
-enrollment data: do not upload or share it wholesale**. Test-program confirmation is not
-independent human consent review, a performance benchmark or production certification.
+Continue below to perform the sequence yourself, or go directly to the
+[method reference](../reference/execution-service.md#methods) to integrate a client.
 
-## Run a service yourself
+## 1. Build and start the host
 
-Build the three binaries, then start a dedicated service directory:
+In **terminal A**, at the repository root:
 
 ```bash
 cargo build --locked -p edge-host -p edge-cli -p edge-simulator --bins
@@ -47,12 +55,16 @@ cargo run --locked -p edge-host -- serve-software \
   --directory "$HOME/.local/state/edge-delegate-service"
 ```
 
-Keep this terminal running. First startup creates a private directory, software authority,
-owner credential and enrollment registry. Subsequent startup requires those identities to
-match. Do not reuse a Python journal, preview-service directory or owner-console directory.
-Use the Linux filesystem, not `/mnt/d`, for private Unix permissions and sockets.
+**Success checkpoint:** the host prints `READY: authenticated SOFTWARE execution service.`
+Leave this terminal running. Waiting for connections is expected; it is not stuck.
 
-In a second terminal, enroll a client. The output file must not already exist:
+On first use, the host creates a private service directory, owner credential, enrollment
+registry and software authority. Restarting the same service reopens those records. Do not use
+a directory belonging to the Python runtime, saved-context preview service or owner console.
+
+## 2. Enroll a client
+
+Open **terminal B**, also at the repository root. Run the remaining commands there:
 
 ```bash
 EDGE_SERVICE_DIR="$HOME/.local/state/edge-delegate-service"
@@ -63,117 +75,139 @@ cargo run --locked -p edge-cli -- service \
   --save-credential "$EDGE_SERVICE_DIR/sample-client.json"
 ```
 
-Enrollment uses the owner credential. The CLI saves the new client credential privately,
-never prints its token, and refuses to overwrite an existing file. Retrying an identical
-owner enrollment returns the same credential; changing its scope or reactivating a revoked
-principal is rejected. Use an intentionally new principal for a replacement enrollment.
+**Success checkpoint:** the reply includes `"enrollment_saved": true` and principal
+`sample-client`. The CLI saves the token privately; it does not print it.
 
-Preview as the enrolled client:
+Only the owner can enroll. The new client has a control scope, but cannot approve its own
+writes. If this client was already enrolled and its file is present, skip enrollment. Do not
+overwrite or delete credentials to bypass a conflict. Revoked clients need an intentionally
+new enrollment, not silent reactivation.
+
+## 3. Preview the operation
+
+Read steps 3–5 before running them: the preview must be confirmed while fresh, and approval
+expires after 60 seconds. No operation has been submitted at this point.
 
 ```bash
 cargo run --locked -p edge-cli -- service \
   --directory "$EDGE_SERVICE_DIR" \
   --credential "$EDGE_SERVICE_DIR/sample-client.json" \
-  --command examples/execution-service/preview-volume.json
+  --command examples/execution-service/preview-volume.json \
+  > "$EDGE_SERVICE_DIR/preview.json"
+python3 -m json.tool "$EDGE_SERVICE_DIR/preview.json"
 ```
 
-Inspect the returned `plan`, destination, `request_id` and `plan_sha256`. Preview does not
-invoke the software device. Owner confirmation is a separate command document:
+**Success checkpoint:** `kind` is `preview`. Inspect the plan: action `audio.volume.set`,
+endpoint `output`, percent value 40, and the intended authority. Keep its `request_id` and
+`plan_sha256`. No action has run.
 
-```json
-{"method":"approve","principal":"sample-client","request_id":"COPY_REQUEST_ID","plan_sha256":"COPY_PLAN_SHA256"}
+Prepare the command files from that response:
+
+```bash
+python3 - "$EDGE_SERVICE_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+preview = json.loads((root / "preview.json").read_text())
+assert preview["kind"] == "preview"
+request_id = preview["request_id"]
+approval = {
+    "method": "approve",
+    "principal": "sample-client",
+    "request_id": request_id,
+    "plan_sha256": preview["plan_sha256"],
+}
+(root / "approve.json").write_text(json.dumps(approval))
+for method in ("submit", "status"):
+    (root / f"{method}.json").write_text(
+        json.dumps({"method": method, "request_id": request_id})
+    )
+PY
 ```
 
-Replace the placeholders with the actual preview values, save the document to a JSON file
-and pass it with `--command FILE` using `owner.json`. Do not approve an uninspected hash.
-Then send this document using `sample-client.json`:
+This only writes local command documents. It does not approve or submit anything.
 
-```json
-{"method":"submit","request_id":"COPY_REQUEST_ID"}
+## 4. Approve as the owner
+
+After inspecting the preview, explicitly confirm its exact plan:
+
+```bash
+cargo run --locked -p edge-cli -- service \
+  --directory "$EDGE_SERVICE_DIR" \
+  --credential "$EDGE_SERVICE_DIR/owner.json" \
+  --command "$EDGE_SERVICE_DIR/approve.json"
 ```
 
-Finally query the same ID with `{"method":"status","request_id":"COPY_REQUEST_ID"}`.
-These manual command documents are deliberately explicit; the automated diagnostic is the
-easier onboarding path. A consumer confirmation screen has not been implemented yet.
+**Success checkpoint:** `kind` is `confirmed`, with the same request ID and plan fingerprint.
+Approval alone does not dispatch. Using the client credential for this command is rejected.
 
-## Public Rust client
+If the preview expired before submission, obtain a fresh preview and prepare new command files.
+If you already submitted, inspect that request's status first; do not overwrite its identity
+to work around an uncertain outcome.
 
-`edge_client::execution::ExecutionClient` connects with an explicit credential file:
+## 5. Submit as the client
 
-```rust,ignore
-use edge_client::execution::{Command, ExecutionClient};
-let client = ExecutionClient::connect(service_directory, client_credential_path)?;
-let preview = client.call(Command::PreviewVolume { percent: 40, budget_ms: 2000 })?;
-// Inspect preview; the owner must confirm its exact request ID and plan hash separately.
+```bash
+cargo run --locked -p edge-cli -- service \
+  --directory "$EDGE_SERVICE_DIR" \
+  --credential "$EDGE_SERVICE_DIR/sample-client.json" \
+  --command "$EDGE_SERVICE_DIR/submit.json"
 ```
 
-Use `call(Command::...)` for the methods below and `close()` to prevent further calls.
-`with_credential` also accepts an explicitly supplied credential, such as an enrollment
-response. This SDK depends only on contracts/protocol/serialization and transport, not the
-executor, database, adapter or model lab. It checks host identity and response bindings and
-does not automatically retry submissions or issue approval.
+**Success checkpoint:** `kind` is `submission` and `admission_durable` is true for the normal
+first submission. This means acceptance was recorded, not that the effect has completed.
 
-## Permissions and methods
+## 6. Inspect the result
 
-| Credential | Methods | Scope |
-| --- | --- | --- |
-| `inspect` client | `capabilities`, `preview_volume`, `status` | May preview, never approve or submit; status is limited to its own principal |
-| `control` client | Above plus `submit`, `cancel`, `reconcile` | Only its own requests and the installed software output-volume action |
-| Owner | `capabilities`, `enroll`, `peers`, `approve`, `inspect`, `recover`, `revoke`, `restart_adapter` | Administrative confirmation, enrollment and recovery; does not submit as a client |
+```bash
+cargo run --locked -p edge-cli -- service \
+  --directory "$EDGE_SERVICE_DIR" \
+  --credential "$EDGE_SERVICE_DIR/sample-client.json" \
+  --command "$EDGE_SERVICE_DIR/status.json"
+```
 
-Administrative selectors use `principal`; client submission never accepts a caller-supplied
-principal. The authenticated token determines it. Approval also binds the request, exact
-parameters, plan hash, policy and target state. A different client or stale plan cannot reuse it.
-Both scopes currently describe the software reference action, not generic device permissions.
+**Success checkpoint:** `operation.state` becomes `succeeded`, with a software-adapter receipt.
+If the operation is still queued/running or null, repeat this **status** command. Do not create
+a new request to poll.
 
-The new socket is `execution.sock`, with protocol `edge-execution-service.v1`. It is separate
-from `preview.sock` and its saved-context protocol. Existing preview commands still cannot
-approve or execute. A version-negotiated hello precedes each command; changing credentials
-mid-connection is rejected. Frames are limited to 64 KiB, strings/parameters are bounded,
-unknown fields and duplicate JSON keys are rejected. There are at most eight active
-connections and eight waiting authority jobs; overload is explicit.
+A timeout does not prove failure or cancellation. Preserve the ID and use
+[results and recovery](../reference/execution-service.md#results-and-recovery) if the outcome
+is unknown. Do not delete the journal.
 
-## Read results correctly
+## 7. Stop and reopen
 
-`submission.admission_durable` reports whether acceptance is durably recorded. A concurrent
-retry may still report `persisting`; that is not execution success. Read status for the same
-request ID. Progress, admission and operation are separate observations and can advance
-while a response is assembled; the durable operation record supplies the effect outcome.
+Press Ctrl-C in terminal A. Start the same host command again, then repeat the status command
+in terminal B. The result remains inspectable. Previews, approvals and unfinished work are
+not automatically resumed.
 
-- No operation record can mean accepted but not yet claimed—not necessarily a lost request.
-- `succeeded` refers to the simulated operation and its receipt, not physical observation.
-- Cancellation before dispatch fences invocation. After dispatch it may return
-  `possibly_dispatched`; it does not undo a completed action.
-- An unknown operation remains unknown until receipt reconciliation gives stronger evidence.
-- An RPC timeout or dropped response is **not cancellation**. Inspect the same request ID.
-  Do not replace it with a new request merely to make an uncertain error disappear.
-- After restart, use `status`/`reconcile` as the original still-enrolled principal, or owner
-  `inspect`/`recover`. Durable records survive; previews and approvals do not. There is no replay.
+Keep the service directory if you need its credentials and execution history. This tutorial
+does not include deletion, stale-backup restoration or a production service manager.
 
-Useful errors include `approval_required`, `repreview_required`, `not_found`, `conflict`,
-`forbidden`, `unauthenticated`, `overloaded`, `capacity` and `persistence_uncertain` on the
-wire. The CLI renders their enum names. A persistence-uncertain enrollment/revocation is
-not a successful acknowledgement: inspect `peers`, preserve storage and resolve the failure.
-Live access is fenced on a failed revocation write, but persistence must succeed before
-revocation across a future restart can be relied on.
+## Troubleshooting
 
-## Operational and security boundaries
+| Symptom | What to do |
+| --- | --- |
+| `cargo: command not found` | Load the rustup shell environment if installed; check that you are in Linux/WSL. |
+| C compiler/linker missing | Install your Linux development toolchain before building bundled SQLite. |
+| Host prints READY and then waits | Expected. Leave terminal A running and use terminal B for clients. |
+| Socket not found / connection refused | Confirm the host is running and both terminals use the same Linux directory. |
+| Private-directory or permission error | Use a dedicated Linux filesystem directory. Do not weaken permissions or reuse another journal. |
+| Credential output already exists | For the same existing active client, skip enrollment. Do not overwrite its file. |
+| `ApprovalRequired` | Confirm the exact preview with the owner credential, then submit as the client. |
+| `RepreviewRequired` | Inspect any submitted work first. If none was submitted, preview again and confirm promptly. |
+| `Unauthenticated` / `Forbidden` | Check credential, service identity, revocation and method scope. Pairing is not implemented. |
+| `NotFound` after restart | Old offers are not restored. Use durable status/reconciliation, not an old submit command. |
+| Timeout or unknown outcome | Inspect the same request ID; reconcile existing evidence. Never blindly replay a mutation. |
 
-- Credentials persist in private files: directory mode 0700, file/socket mode 0600. They are
-  bearer secrets. The server checks Linux peer OS identity in addition to the token.
-- This is **not per-application OS isolation**: malicious software running as the same user
-  may read that user's files. Installed local applications are trusted. No TCP listener,
-  remote pairing, TLS/relay transport, multi-user hosting or OS-protected keychain is claimed.
-- Enrollment is bounded to 64 retained principals. Revoked entries are not silently removed.
-  The authority retains 128 offers per lifetime and 10,000 durable admissions. At limits,
-  new work is refused; long-running archival and byte quota policies remain unfinished.
-- Do not delete or restore old copies of `enrollment.json`, credentials, the journal or
-  device database to clear a fault. Stale backups can invalidate revocation/deduplication
-  evidence; safe restore fencing, key rotation and a supported rollback procedure are pending.
-- Ctrl-C stops the host process, not a physical action. Restart preserves uncertainty and
-  never resumes work. Graceful system-service shutdown/installation and soak testing remain pending.
-- Adapter I/O and framing are bounded; pathological filesystem calls cannot be hard-preempted.
-  The simulator child is trusted code, not an OS security sandbox.
+## Next steps
 
-Next: durable event delivery and lifecycle/packaging tests, then independent security and
-adopter checks. Native adapters and other platforms still require their own evidence.
+- Integrate the [public Rust client and methods](../reference/execution-service.md).
+- Understand [permission, approval and uncertainty](../concepts/execution.md).
+- Review [security and storage limits](../reference/execution-service.md#security-and-storage)
+  before using the service beyond this tutorial.
+- Check [qualification status](../qualification-status.md) for deployment evidence.
+
+The reference endpoint and these tests establish a software integration boundary, not native
+audio control or production qualification.

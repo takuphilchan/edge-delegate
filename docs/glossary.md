@@ -25,6 +25,7 @@ An **unknown outcome** means the action may have happened; it is not permission 
 | GPU | Graphics Processing Unit | The processor used here for FunctionGemma inference and LoRA training. |
 | ID | Identifier | A stable name that distinguishes a request, capability, step, record, or scenario group from others. |
 | IR | Intermediate Representation | A small structured format between natural language and execution. `Plan IR` is the project's typed plan format. |
+| IPC | Interprocess Communication | A connection between separate running processes. The Rust execution service currently uses a local Unix socket, not a network API. |
 | JSON | JavaScript Object Notation | The structured text format used for public contracts and plans. |
 | JSONL | JSON Lines | A dataset format containing one complete JSON object per line. |
 | LLM | Large Language Model | A language model capable of general text processing. FunctionGemma is much smaller and specialized for function calling; a future external LLM may handle complex text. |
@@ -47,6 +48,11 @@ An **unknown outcome** means the action may have happened; it is not permission 
 | Actuator | Hardware that changes the physical world, such as a relay, motor, valve, or display. Actuator operations receive stricter side-effect and idempotency checks than sensor reads. |
 | Adapter | Ambiguous without a qualifier: a model adapter is learned weights loaded with a base model; a device adapter is installed code implementing transport, snapshots and bounded invocation. They are not interchangeable. |
 | Approval | A temporary authorization tied to one request, one capability, an expiry time, and the fingerprint of one exact plan. |
+| Authority | The host identity and execution owner responsible for enforcing permissions and retaining operation evidence. A client does not become an authority by proposing a plan. |
+| Bearer credential | A secret that authenticates whoever presents it. Keep credential files private; a plan fingerprint is not a credential. |
+| Principal | An enrolled caller identity. Rust client requests are bound to the authenticated principal, not a client-supplied name. |
+| Admission | The host accepting a request for processing. Durable admission is recorded in storage; it is not confirmation that the action completed. |
+| Reconciliation | Looking up evidence about an existing operation to resolve uncertainty, without issuing that operation again. |
 | Artifact | A generated file such as a model report, checkpoint, adapter, or TensorBoard log. Artifacts are stored locally and ignored by Git. |
 | Artifact manifest | The versioned `edge-delegate-artifact.json` file that binds an adapter to its plugin, exact base revision, tokenizer, protocol, datasets, recipe, and file fingerprints. |
 | Attention backend | The implementation used for the model's attention calculation, such as eager attention or PyTorch Scaled Dot Product Attention (SDPA). A plugin declares which implementations it supports. |
@@ -60,7 +66,7 @@ An **unknown outcome** means the action may have happened; it is not permission 
 | Context window | The maximum number of tokens a model can receive and generate in one operation. A training label must fit completely; silently cutting it off would teach incomplete plans. |
 | ControlRequest | A typed single-target action request bound to a device/endpoint, registration and catalog fingerprint. It is compiled to Plan IR, not dispatched directly. |
 | ControlSession | The synchronous public SDK that owns targeted preview, execution and receipt reconciliation. It is not a supervised service. |
-| Endpoint | An operation target within a device. Current controls support one endpoint per device, named main by default. |
+| Endpoint | An operation target within a device. Python reference controls use main by default; the Rust software-volume service uses output. |
 | Receipt | A durable record of an operation outcome. Replaying a receipt is not a fresh device observation. |
 | Qualification | Evidence that an exact supported configuration passed declared gates. Implemented features or a passing demo are not qualification. |
 | Contract | A versioned agreement about fields, types, limits, and meaning at a component boundary. Contracts let different implementations exchange data without guessing. |

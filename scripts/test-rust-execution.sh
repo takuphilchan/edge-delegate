@@ -18,3 +18,4 @@ cargo test --locked -p edge-simulator --test execution_service
 target_dir="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
 task_run_dir="$(mktemp -d /tmp/edge-execution-XXXXXX)"
 python3 scripts/check_rust_execution.py "$target_dir/debug/edge-delegate-host" "$target_dir/debug/edgectl" "$task_run_dir/evidence"
+python3 scripts/check_rust_execution_tutorial.py "$target_dir/debug/edge-delegate-host" "$target_dir/debug/edgectl" "$task_run_dir/tutorial"
