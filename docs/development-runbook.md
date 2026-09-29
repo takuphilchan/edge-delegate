@@ -1,5 +1,9 @@
 # Development Runbook
 
+This is a maintainer task reference, not the first-use sequence. New users start with the
+[software-light tutorial](try-it.md); model users continue with the [model tutorial](model-tutorial.md).
+The [command inventory](reference/cli.md) is checked against the actual parsers.
+
 `edge-delegate control-demo --directory PRIVATE_DIRECTORY --text "Set the inspection light to 40%."`
 previews an exact command for two software lights. Add `--execute` to change emulator state;
 `--request-id ID` supports durable retries. No model is loaded. See [device controls](device-control.md)

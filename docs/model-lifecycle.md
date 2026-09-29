@@ -8,7 +8,9 @@ plugin interface and artifact checks, read
 [Model plugins, artifacts, and compute](model-plugins-and-compute.md).
 
 For the next data iteration, review the [dataset-v2 draft](../specs/dataset-v2.md). Its labeling,
-independent expected-effect rules, and review gates are proposed, not implemented. The current
+independent expected-effect rules, and collection requirements remain a draft. Review-ledger,
+effect-oracle and export checks exist; actual independent approval and full coverage do not.
+See [review tooling](implementation-batch-1.md). The current
 v1 generator derives expected effects using the same coordinator evaluated later; passing those
 checks establishes internal consistency, not independently verified correctness.
 
@@ -30,6 +32,10 @@ The model lifecycle exists to improve proposal quality while preserving the runt
 Supervised fine-tuning (SFT) means learning from known input/output examples. Low-Rank Adaptation (LoRA) means training a small adapter while leaving the original base-model weights frozen. Parameter-Efficient Fine-Tuning (PEFT) is the framework used to attach and load that adapter.
 
 ## End-to-end data and model flow
+
+The diagram below describes the legacy generated full-plan/LoRA pipeline. It is not the
+reviewed-data approval workflow or the only plugin protocol. Current compact-task candidates
+use a short decision and deterministic compiler, and select checkpoints by validation outcomes.
 
 ```mermaid
 flowchart TD
@@ -53,7 +59,7 @@ flowchart TD
     Compute --> Mask[Plugin-owned tool-call loss mask]
     Mask --> LoRA[Train small LoRA adapter]
     LoRA --> Checkpoints[Saved checkpoints]
-    Checkpoints --> Best[Lowest validation-loss checkpoint]
+    Checkpoints --> Best[Validation outcomes for compact tasks; legacy recipe may use loss]
     Best --> Adapter[final-adapter + portable manifest]
 
     Adapter --> Backend[Base model + adapter backend]
@@ -94,9 +100,17 @@ The current pilot distribution is:
 | Test | 4 | One held-out local battery group |
 | Safety | 8 | Deny scenarios for unsafe actuator requests and prompt injection |
 
-This distribution is useful for pipeline validation but is not route-balanced model training.
+This legacy fixture distribution is useful for pipeline validation, not route-balanced
+training or the current collection target. Use the [roadmap data gates](roadmap.md#evidence-and-reviewed-data)
+for new datasets and the [evidence archive](history/qualification-status-through-2026-09-28.md)
+for the larger compact-task runs.
 
 ## Canonical records and the FunctionGemma training export
+
+The exact fields/tool syntax in this section describe the legacy functiongemma full-plan
+export. The functiongemma-tasks plugin exports select_task decisions; task-classifier has its
+own classification representation. Follow the selected plugin's preflight rather than
+converting every artifact to submit_plan.
 
 The canonical records are model-neutral. During `generate-data`, each selected trainable plugin receives the same grouped splits and writes its own export. This allows another model to use a different chat template or structured-output syntax without changing gold Plan IR or evaluation groups.
 
@@ -112,6 +126,9 @@ The user context contains the request, live state, policy, Plan-IR shape, constr
 
 ## Preflight gates
 
+The checks below are the legacy full-plan preflight. Compact-task preflight checks its own
+decision protocol and numeric policy; successful preflight does not establish independent labels.
+
 `edge-delegate-lab train --preflight-only` loads both splits and refuses to continue when:
 
 - a JSONL line is too large, empty, malformed, duplicated, or has duplicate object keys;
@@ -124,7 +141,8 @@ The user context contains the request, live state, policy, Plan-IR shape, constr
 - the assistant loss mask is empty, omits part of the FunctionGemma tool-call envelope, or does
   not end on the expected special-token boundary.
 
-For the current FunctionGemma prompt, the measured maximum is 1,354 training tokens and 1,322 validation tokens, below the configured 2,048-token ceiling.
+For the historical full-plan pilot prompt, measured maxima were 1,354 training tokens and
+1,322 validation tokens, below that recipe's 2,048-token ceiling. Rerun preflight for new exports.
 
 ## Training-only chat-template mask
 
@@ -143,7 +161,8 @@ training report. Those explicit tool-call checks are the acceptance signal for t
 
 ## Low-Rank Adaptation configuration and checkpoint selection
 
-The pilot configuration uses:
+The historical full-plan pilot configuration uses the values below. This is not the current
+compact-task recipe or a recommendation to retrain before the review gates pass:
 
 | Setting | Value |
 | --- | --- |
@@ -166,6 +185,10 @@ The runner refuses to reuse a non-empty output directory. This prevents a new ru
 
 ## What is saved
 
+This is the legacy run layout. Compact checkpoint comparison additionally produces a
+selected-adapter directory and selection evidence; do not equate final-adapter with
+validation-outcome selection for every plugin.
+
 ```text
 artifacts/training/{run-id}/
   checkpoint-*/             epoch checkpoints retained by save_total_limit
@@ -182,6 +205,10 @@ artifacts/training/{run-id}/
 Artifacts are intentionally ignored by Git. The configuration, generator, protocol, and code are tracked; machine-specific weights, paths, raw outputs, and logs are not.
 
 ## How an adapter reconnects to runtime
+
+This diagram shows the legacy full-plan branch. Compact proposals are parsed as TaskDecision,
+compiled deterministically and then enter the same validator. Deterministic controls need
+neither adapter weights nor this model-loading path.
 
 ```mermaid
 flowchart LR

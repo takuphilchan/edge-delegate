@@ -2,25 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from urllib.parse import unquote
 
 from edge_delegate.cli import build_parser as build_edge_parser
 from edge_delegate_lab.cli import build_parser as build_lab_parser
+from scripts.documentation_checks import broken_links, documents
+from scripts.generate_cli_reference import DESTINATION, render
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-DOCUMENTS = (
-    REPOSITORY_ROOT / "README.md",
-    *sorted((REPOSITORY_ROOT / "docs").glob("*.md")),
-    REPOSITORY_ROOT / "specs" / "dataset-v2.md",
-    REPOSITORY_ROOT / "specs" / "dataset-review-workspace.md",
-    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "README.md",
-    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "POLICY.md",
-    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "OWNER-DECISION.md",
-    REPOSITORY_ROOT / "data" / "fixtures" / "pilot-v2" / "AUTHOR-AUDIT.md",
-)
-MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]+]\(([^)]+)\)")
+DOCUMENTS = documents(REPOSITORY_ROOT)
 
 
 def _subcommands(parser) -> set[str]:
@@ -29,17 +19,12 @@ def _subcommands(parser) -> set[str]:
 
 
 def test_documentation_local_links_resolve() -> None:
-    missing: list[str] = []
-    for document in DOCUMENTS:
-        text = document.read_text(encoding="utf-8")
-        for raw_target in MARKDOWN_LINK.findall(text):
-            target = raw_target.strip().split(maxsplit=1)[0].strip("<>")
-            if target.startswith(("https://", "http://", "mailto:", "#")):
-                continue
-            relative = unquote(target.split("#", 1)[0])
-            if relative and not (document.parent / relative).resolve().exists():
-                missing.append(f"{document.relative_to(REPOSITORY_ROOT)} -> {target}")
+    missing = broken_links(DOCUMENTS)
     assert not missing, "documentation links do not resolve:\n" + "\n".join(missing)
+
+
+def test_generated_command_reference_matches_parsers() -> None:
+    assert DESTINATION.read_text(encoding="utf-8") == render()
 
 
 def test_runbook_names_every_implemented_command() -> None:

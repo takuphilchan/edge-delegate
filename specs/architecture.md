@@ -48,7 +48,11 @@ model family.
 
 Every saved adapter must include a versioned artifact manifest binding the plugin, exact base revision, plan protocol, tokenizer fingerprint, adapter-file fingerprints, dataset fingerprints, recipe, context limit, and precision. New inference loads verify those bindings before attaching an adapter.
 
-## FunctionGemma implementation
+## Legacy full-plan FunctionGemma implementation
+
+This section describes the experimental full-plan plugin only. The compact-task plugin uses
+select_task and a deterministic compiler. Structured controls and exact command parsing need
+no model. See the [current architecture](../docs/system-architecture.md) for all entry paths.
 
 The adapter presents one synthetic `submit_plan(plan_json)` tool. This lets the model propose a complete dependent plan while keeping FunctionGemma's role limited to function calling. The returned string is parsed as strict Plan IR, checked against live contracts, and rejected before execution if any invariant fails. The adapter cannot call capabilities itself.
 

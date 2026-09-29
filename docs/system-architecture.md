@@ -1,256 +1,147 @@
-# System Architecture
+# System architecture
 
-[Documentation home](README.md) | [Glossary](glossary.md)
+[Documentation home](README.md) | [Terms](glossary.md) | [Current status](qualification-status.md)
 
-This page follows the code that exists today. It separates request-time behavior from model
-setup and training so it is clear which component runs when and which component has authority.
+Edge Delegate separates deciding what was requested from deciding what may execute.
+Its current adapters control software devices. Physical support and the supervised service
+remain unqualified or unimplemented; this page describes existing code.
 
-## The architecture in one sentence
+## Three proposal paths, one execution boundary
 
-The coordinator asks a replaceable planner for typed Plan IR, validates that plan against a
-device snapshot and policy, and gives only a validated plan to the executor.
+| Entry | Interpretation | Output |
+| --- | --- | --- |
+| Structured control SDK | Explicit target/action/parameters; no language model | ControlRequest compiled to Plan IR |
+| Deterministic text command | Full-command grammar, then exact target resolution | Same control request or non-action response |
+| Learned planner | Selected model plugin interprets text | TaskDecision compiled to Plan IR, or legacy full Plan IR |
 
-The planner can be a model, but the planner cannot authorize or invoke a capability.
+The old fixed-plan demo is a wiring fixture, not a fourth language-understanding system.
+Plan IR means Plan Intermediate Representation: typed action data, not executable Python.
 
-The bounded-task path is `request -> TaskDecision -> trusted task compiler -> PlanIR ->
-validation -> execution`. `functiongemma-tasks` and `task-classifier` share that compiler;
-the legacy `functiongemma` plugin still proposes complete plans. Task catalogs contain
-installed application code, never executable profile JSON.
+A compact view of the implemented paths:
 
-`edge-delegate-lab run` composes a persistent planner session, local-only policy, SQLite
-request/operation journal, and a selected installed deadline-aware device adapter (Unix by default).
-The first proposal is persisted before dispatch and reused on retries; input/device/plan changes
-under the same request ID are rejected. A separate emulator process owns device
-state and receipts. An uncertain acknowledgement blocks dependent/new operations until
-reconciliation; it is not a confirmed failure or permission to retry a write. The legacy
-simulator keeps its in-memory replay interface. See [gateway usage](gateway-preview.md).
-Installed catalogs and adapters are described in the [extension contract](extensions.md).
+~~~text
+Structured request ----> target + catalog binding ----> ControlPlanner ----+
+Exact light command ---> grammar + target resolution ---------------------+
+                                                                         |
+Model request ----------> model plugin --> task compiler / full plan ------+
+                                                                         v
+                            validation --> authorization --> durable execution
+                                                                         |
+                                              confirmed / failed / unknown
+~~~
 
-The **runtime** is the reusable action-processing component. The **simulator** is a fake device.
-The **lab** is the development and test harness around them. A fixed-plan demo tests the runtime;
-a model preview tests proposal generation; `simulate` connects an actual model to the runtime
-without touching physical hardware. See the [guided walkthrough](try-it.md).
+The actual coordinator obtains context and validates policy with the plan before calling
+the executor; validation and authorization are parts of the same deterministic checks.
+The model never receives device-dispatch authority.
 
-## Public application ownership
+## Follow a targeted light request
 
-`edge_delegate.application.GatewaySession` now owns the persistent synchronous execution session.
-The lab gateway module is a compatibility re-export. It provides explicit preview/execute,
-status, receipt reconciliation and start/close lifecycle, and rejects concurrent same-session use.
-It does not yet implement the spawned supervisor, queue, service protocol or whole-request deadline.
-See [the SDK usage and limits](implementation-batch-1.md). Model loading remains caller-owned.
+Consider: Set the inspection light to 40 percent.
 
-## Three boundaries, not one large application
+1. The demo selects an installed light catalog and exact-command parser.
+2. DeviceRegistry resolves inspection light to one stable device/endpoint. The shared alias
+   light matches two devices and returns clarification without a plan.
+3. ControlSession creates a ControlRequest binding the target registration and catalog
+   fingerprints to the action and integer parameter. No model runs.
+4. The selected GatewaySession delegates to Coordinator, which obtains the device snapshot
+   and capability cards. Its planner wrapper reserves the request in the shared journal;
+   conflicting ID reuse across devices or parameters is rejected.
+5. For new work, ControlPlanner maps the installed action to a capability and builds one
+   Plan IR step. Target binding affects the plan fingerprint used by approvals. The first
+   proposal is persisted; identical retries retrieve that saved plan.
+6. Coordinator validates the plan's shape, arguments, state, permissions, approval and budget
+   constraints against the collected context.
+7. Executor binds the plan, claims the operation durably, and checks fresh per-step guards.
+   The bound adapter checks identity/configuration again before dispatch.
+8. The emulator changes only that light and records a receipt. The journal records the
+   confirmed result. The demo separately reads software state for presentation.
 
-```text
-Host lab                           Model integration                  Edge runtime
--------------------------------    -------------------------------    ---------------------------
-generate data                      discover selected plugin           receive request
-resolve training compute           verify optional adapter            obtain device context
-train adapter                      construct Planner                  call Planner interface
-evaluate model                                                        validate typed Plan IR
-                                                                        execute valid local steps
+ControlSession owns one synchronous GatewaySession per device, sharing a journal. There is
+one endpoint per registered device and one target per request. This is not a distributed
+multi-device transaction. Concurrent same-session use is rejected, not queued.
 
-src/edge_delegate_lab/             src/edge_delegate/model_plugins/   contracts/, ir/, policy/
-shared data/evaluation libraries   model-specific planner/trainer     planner/base.py, runtime/
-```
+The public classes are in [application](../src/edge_delegate/application/); the compiler is
+[ControlPlanner](../src/edge_delegate/planner/control.py). The [SDK reference](reference/control-sdk.md)
+explains request serialization and lifecycle.
 
-These parts share contracts, but they do not have equal authority:
+## Follow a learned request
 
-- The **host lab** is development tooling. It does not belong on the edge execution path.
-- A **model plugin** is a factory and translation layer. It creates a planner for a model family.
-- The **edge runtime** owns validation, routing, execution, replay protection, and audit.
+For a temperature request, the host selects and loads a model plugin before handling queries:
 
-The plugin is selected before a request is handled. At request time, the coordinator sees only
-the model-neutral `Planner` interface.
+- functiongemma-tasks proposes a compact select_task decision. Installed task code compiles it.
+- task-classifier selects the same reference tasks through a separately trained baseline.
+- Legacy functiongemma proposes a complete plan through submit_plan.
+- bounded-commands is a deterministic reference-task grammar, not another learned model.
 
-The source tree also contains model-neutral `edge_delegate.data` and
-`edge_delegate.evaluation` libraries. They are composed by the host lab and are not imported by
-`edge_delegate.runtime`. Likewise, the simulator implements the runtime's `DeviceGateway` port;
-the runtime does not import the simulator.
+Those planners do not currently understand the new light-control vocabulary. A new adapter
+implementation or capability description does not qualify existing model weights for it.
 
-## Setup happens before request handling
+GatewaySession wraps the planner for persistent request/plan binding. The lab's gateway module
+is a compatibility re-export; application ownership is no longer lab-only. Model loading and
+preparation remain caller-owned. Profiles used by plan/interactive are saved context, not live
+devices; those clients never execute. See the [model tutorial](model-tutorial.md).
 
-There are currently two ways a planner is constructed:
+## Confirmed, failed and unknown are different
 
-```mermaid
-flowchart LR
-    Demo[edge-delegate demo] --> Static[StaticPlanner]
+For deadline-aware adapters, Executor uses invoke_bounded with an operation identity and
+deadline. Legacy simulation adapters use invoke and in-memory replay; they do not establish
+durable live-device guarantees.
 
-    Lab[edge-delegate-lab plan, interactive, simulate, evaluate, or model-doctor] --> Registry[ModelPluginRegistry]
-    Registry --> Plugin[Selected model plugin]
-    Artifact[Optional adapter directory] --> Plugin
-    Settings[Bounded plugin settings] --> Plugin
-    Plugin --> Verify[Verify artifact compatibility and file digests]
-    Verify --> Planner[Construct typed Planner]
-```
+If an acknowledgement is lost after a write, the write may already have happened:
 
-The runtime CLI demo uses `StaticPlanner`, so it exercises coordination and execution without a
-model. The lab uses the plugin registry for real-model evaluation and simulator execution.
-`simulate` gives the constructed planner to the ordinary coordinator and a fresh explicit device
-fixture; `plan` and `interactive` only inspect proposals against saved profile context.
-A production application can
-compose the same runtime ports and planner interface. The experimental `run` command now
-wires the reference Unix emulator; physical-device integration remains unqualified.
+- return execution_unknown, not confirmed failure;
+- stop dependent steps and block new work on that device while an unresolved claim remains;
+- reconcile the original receipt without blindly invoking the write again.
 
-For the built-in FunctionGemma plugin, construction may load a base model and optional Low-Rank
-Adaptation (LoRA) adapter. If the adapter has `edge-delegate-artifact.json`, the plugin verifies
-its plugin API, exact protocol/schema compatibility, required file coverage, and tokenizer/adapter
-file hashes before returning a planner. It pins the recorded base-model revision and rejects an
-explicit conflicting model ID. Plugin package versions are recorded but need not match exactly
-when the artifact contract remains compatible.
+A successful reconciliation settles the recorded operation; it does not resume later steps
+or prove a complete user task succeeded. A replayed success is historical, not a fresh reading.
 
-## The actual request path
+The light emulator can commit state and receipts atomically in SQLite. A physical device
+cannot inherit that claim. No exactly-once physical execution or automatic rollback is promised.
+See [recovery](how-to/reconcile.md) and [result meanings](reference/results.md).
 
-This is the path implemented by `Coordinator.handle`:
+## Responsibilities and dependencies
 
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant Coordinator
-    participant Device as DeviceGateway
-    participant Planner
-    participant Validator as validate_plan
-    participant Executor
-    participant Audit as AuditSink
+| Component | Owns | Must not claim or do |
+| --- | --- | --- |
+| contracts/ | Bounded request, capability, state, policy and plan types | Interpret arbitrary intent or execute |
+| application/ | Sessions, registry, lifecycle, caller-facing composition | Bypass authorization |
+| planner/ | Deterministic compilation and optional model translation | Authorize its own output |
+| ir/ and policy/ | Validation, fingerprints, permissions, approvals | Dispatch operations |
+| runtime/ | Coordination, durable execution and recovery ports | Import lab or simulator implementations |
+| adapters/ and simulator/ | Implement device operations and receipt lookup | Claim physical evidence from software tests |
+| model_plugins/ | Artifact compatibility and planner factories | Automatically teach old weights new actions |
+| edge_delegate_lab/ | Dataset review, training and evaluation | Be required by the core application |
 
-    Caller->>Coordinator: PlanningRequest
-    Coordinator->>Device: snapshot() and capability_cards
-    Device-->>Coordinator: DeviceState and CapabilityCard[]
-    Coordinator->>Planner: plan(request, PlannerContext)
-    Planner-->>Coordinator: typed PlanIR
-    Coordinator->>Coordinator: require matching request_id
-    Coordinator->>Validator: plan + cards + state + policy + time
+Executable extensions are trusted installed code. Profiles and manifests are data, not arbitrary
+module import paths. The deterministic SDK runs without PyTorch or other machine-learning
+packages. Dependency tests enforce important import boundaries; they are not a security sandbox.
 
-    alt planner failed or output was not typed PlanIR
-        Coordinator->>Audit: planning failed
-        Coordinator-->>Caller: planner_failed or invalid_plan
-    else validation failed
-        Coordinator->>Audit: validation rejected
-        Coordinator-->>Caller: invalid_plan
-    else local or hybrid plan
-        Coordinator->>Audit: validation accepted
-        Coordinator->>Executor: ValidatedPlan
-        Executor->>Device: recheck bindings and obtain fresh snapshot
-        Executor->>Executor: repeat deterministic preflight
-        Executor->>Device: invoke each declared step sequentially
-        Executor-->>Coordinator: ExecutionResult
-        Coordinator->>Audit: execution outcome
-        Coordinator-->>Caller: executed, execution_failed, or external_required
-    else external, clarify, defer, or deny
-        Coordinator->>Audit: validation accepted
-        Coordinator-->>Caller: route-specific non-execution status
-    end
-```
+## Interfaces and versioning
 
-The executor does more than trust an old Boolean result. `ValidatedPlan` is bound to fingerprints
-of the exact plan, capability set, policy, and state snapshot. Before invoking anything, the
-executor checks the active capability/policy binding and validates again against a fresh device
-snapshot. Only then can it call `DeviceGateway.invoke`.
+- ControlRequest v1 is an outer, single-target envelope with boolean/integer parameters.
+- TaskDecision bounded-task.v1 belongs to the separate reference model path.
+- Both can compile to unchanged plan-ir.v0.
+- Control results wrap the existing edge-gateway-result.v1 response.
+- Candidate pack inspection still requires the legacy local-display catalog and decimal policy.
+  It is not yet generalized deployment configuration for the new controls.
 
-For each step, the executor checks the resolved arguments before invocation and validates the
-returned value before caching or passing it to another step. Cached results go through the same
-output checks. Device adapters do not get to bypass these checks by omitting simulator validation.
-
-## What happens inside the FunctionGemma planner
-
-The coordinator does not know any of these model-specific details:
-
-```mermaid
-flowchart LR
-    Input[Request + PlannerContext] --> Retrieval[Policy-filtered BM25 capability selection]
-    Retrieval --> Prompt[Versioned messages + one submit_plan tool]
-    Prompt --> Backend[FunctionGemma base model + optional adapter]
-    Backend --> Text[Generated text]
-    Text --> Wrapper[Require the exact submit_plan wrapper]
-    Wrapper --> Parser[Strict Plan-IR parser]
-    Parser --> Typed[Typed PlanIR returned to Coordinator]
-```
-
-Best Matching 25 (BM25) selection reduces prompt size; it does not grant access. The validator
-checks every proposed capability against the complete active capability set and policy.
-
-Before generation, the backend checks the tokenized prompt plus the reserved output against
-the effective context limit. It rejects an oversized prompt instead of truncating it.
-
-The model receives only the synthetic `submit_plan(plan_json)` tool. It does not receive the
-real sensor and actuator functions. Requiring one complete plan lets deterministic code inspect
-dependencies, permissions, approvals, side effects, and total resource cost before the first
-device action.
-
-## Route behavior implemented today
-
-| Valid plan route | Steps allowed | Coordinator result | Device invocation |
-| --- | --- | --- | --- |
-| `local` | One or more local steps | `executed` or `execution_failed` | Yes, through the executor |
-| `hybrid` | One or more local steps | Local steps run, then `external_required` | Local steps only |
-| `external` | No steps | `external_required` | No |
-| `clarify` | No steps; clarification text required | `clarification_required` | No |
-| `defer` | No steps; reason code required | `deferred` | No |
-| `deny` | No steps; reason code required | `denied` | No |
-
-`external_required` is a status, not an external-model call. The `connectors/` modules are
-placeholders. The `ExternalHandoff` contract exists, but the coordinator does not yet construct
-or transmit one.
-
-## Component authority and code ownership
-
-| Component | Code | May do | Must not do |
-| --- | --- | --- | --- |
-| Contracts | `src/edge_delegate/contracts/` | Decode bounded values into typed objects | Infer policy or execute work |
-| Planner interface | `planner/base.py` | Accept request/context and return `PlanIR` | Invoke device capabilities |
-| FunctionGemma planner | `planner/functiongemma.py` | Select prompt cards, generate, strictly parse | Relax runtime validation |
-| Model plugin | `model_plugins/` | Verify artifacts and construct a planner/diagnostic session | Become an execution authority |
-| Static validator | `ir/static_check.py` | Check plan shape, capabilities, state, policy, approvals, and budgets | Invoke capabilities |
-| Coordinator | `runtime/coordinator.py` | Gather context, call planner, validate, route, and audit | Execute raw planner output |
-| Executor | `runtime/executor.py` | Recheck a `ValidatedPlan` and invoke declared local steps | Accept text or an unvalidated plan |
-| Runtime ports | `runtime/ports.py` | Define device, clock, audit, and idempotency interfaces | Depend on simulator or lab code |
-| Simulator | `simulator/` | Implement `DeviceGateway` deterministically for tests | Claim to be production hardware |
-| Host lab | `edge_delegate_lab/` | Generate data, train, inspect compute, and evaluate | Be imported by the edge runtime |
-
-Within the lab, `profiles.py` owns saved context, `client.py` owns non-executing queries,
-`simulation.py` composes model-to-runtime simulation, and `presentation.py` renders their
-results. CLI handlers select and connect these components; rendering does not authorize actions.
+Keep these contracts distinct. Existing model artifacts and temperature commands must not
+silently acquire new meanings. See [schemas](../schemas/) and [release scope](release-contract.md).
 
 ## Command-line boundaries
 
-The separation is deliberate and tested:
+The [generated command reference](reference/cli.md) is authoritative for the current command
+inventory. In brief: edge-delegate owns dependency-free core commands; edge-delegate-lab owns
+model/data/diagnostic workflows; edge-delegate-device runs the separate-process Unix emulator.
+The control-demo lights are in-process SQLite devices, not that Unix emulator.
 
-| Program | Commands | Intended environment |
-| --- | --- | --- |
-| `edge-delegate` | `demo`, `validate` | Small runtime/edge environment; no ML dependency required |
-| `edge-delegate-lab` | Data/training commands, profile and model previews, `simulate`, `run`, `reconcile`, `benchmark`, `qualify` | Development host or Linux gateway with optional model packages |
-| `edge-delegate-device` | Separate-process reference emulator | Linux/WSL; no physical hardware |
+## Still planned
 
-`tests/architecture/test_dependencies.py` rejects runtime imports of the simulator, model
-plugins, datasets, evaluation code, connectors, or lab package. `tests/unit/test_cli_boundaries.py`
-keeps model and training commands out of the edge CLI.
+The active [roadmap](roadmap.md) covers generalized task packs, spawned inference-worker
+supervision, a bounded request queue, whole-request deadlines and cancellation, jobs, rules,
+and physical qualification. Neither synchronous session currently implements the production
+service or guarantees a whole-request deadline. A step deadline is not an end-to-end deadline.
 
-## Dependency direction
-
-The intended source dependency direction is:
-
-```text
-contracts
-  <- policy, Plan IR, retrieval, runtime ports
-  <- planner implementations, simulator, runtime coordinator/executor
-  <- model plugins and evaluation
-  <- host lab and model-specific training
-```
-
-Optional packages such as PyTorch, Transformers, PEFT, TRL, and Datasets are imported only on
-model inference or training paths. Importing and using the deterministic runtime does not require
-them.
-
-## Implemented versus planned
-
-| Boundary | Implemented | Still planned |
-| --- | --- | --- |
-| Device | Legacy simulator; versioned deadline gateway, bounded Unix adapter, separate-process emulator | Physical hardware adapters and hardware fault qualification |
-| Planner | Legacy full-plan model plus compact FunctionGemma and independently trained classifier sharing a task compiler | A model that passes all release gates; production request service |
-| Local execution | Revalidation, durable operation claims, replay/reconciliation, uncertain outcomes | Target-specific concurrency or compensation semantics, if ever required |
-| External work | Route validation, `external_required` status, handoff data type | Redaction pipeline, connector, response contract, response validation, provenance, timeout/cancellation |
-| Model lifecycle | Grouped task data, effect evaluation, both trainers, validation-outcome selection, artifact checks, persistent client, benchmark and qualification commands | Independently reviewed language coverage, passing quality/latency gates, embedded export, physical-device benchmarks |
-
-The code should be changed before a document claims that a planned boundary is implemented.
-
-[Previous: Documentation home](README.md) | [Next: Contracts and safety](contracts-and-safety.md)
+The [current-status page](qualification-status.md) owns measured results; this architecture
+page does not grant a release qualification.

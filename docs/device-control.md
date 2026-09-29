@@ -1,4 +1,4 @@
-# Control two software lights
+# Device-control command guide
 
 This is the first device-control implementation batch, not the completed production
 roadmap. It adds a public structured SDK and exact English commands for two independent
@@ -9,43 +9,10 @@ because this deterministic control path passes tests.
 
 ## Try it
 
-Use your activated Python environment, then install from the repository root:
-
-```bash
-python -m pip install -e ".[dev]"
-bash scripts/test-control.sh
-```
-
-That script automatically tests controls, wrong-target prevention, permissions, duplicate
-requests, restart, and lost-acknowledgement recovery. It uses temporary software state.
-
-For persistent demo state, choose a private directory on disk. Preview is the default:
-
-```bash
-edge-delegate control-demo \
-  --directory "$HOME/.local/state/edge-delegate-lights" \
-  --text "Set the inspection light to 40 percent."
-```
-
-The output shows a proposed plan, validation issues (empty if valid), and unchanged light
-state. Initialization creates local databases, but preview never creates an operation
-receipt or changes an existing light's state.
-
-Explicitly execute the same command:
-
-```bash
-edge-delegate control-demo \
-  --directory "$HOME/.local/state/edge-delegate-lights" \
-  --text "Set the inspection light to 40 percent." \
-  --request-id inspection-brightness-1 --execute
-```
-
-The inspection brightness becomes 40; workbench brightness is unchanged. Brightness and
-power are independent: changing brightness does **not** turn the light on.
-
-Repeat that exact request ID to retrieve its recorded result, not issue another action.
-Use a new ID for new work. Reusing an ID with changed parameters or another device is a
-conflict. A replayed receipt describes the original operation, not necessarily current state.
+Follow the [first-use tutorial](try-it.md) for installation, preview, execution, ambiguity and
+replay. This page lists exact commands and control-specific constraints, not a second quickstart.
+For automatic developer regression tests, use `bash scripts/test-control.sh` from an activated
+development environment. It changes only temporary software state.
 
 ## Supported exact commands
 
@@ -68,39 +35,9 @@ validation/execution; successful previews and confirmed executions exit 0.
 
 ## Public Python SDK
 
-Installed applications can import these public APIs without importing the lab:
-
-```python
-from edge_delegate.application import ControlSession, DeviceRegistration, DeviceRegistry
-from edge_delegate.simulator.lights import LightEmulator, light_policy
-from edge_delegate.planner.control import light_catalog
-
-# Parent directory must already exist and be private.
-device = LightEmulator("/private/path/inspection.sqlite")
-registry = DeviceRegistry([
-    DeviceRegistration("inspection light", device, light_policy(), aliases=("inspection",)),
-])
-
-with ControlSession(
-    registry, catalog=light_catalog(), journal_path="/private/path/gateway.sqlite"
-) as control:
-    request = control.request(
-        request_id="brightness-1",
-        target="inspection light",
-        action="light.brightness.set",
-        parameters={"percent": 40},
-    )
-    print(control.preview(request))
-    print(control.execute(request))
-```
-
-`light.power.set` takes `{"on": true}`; `light.brightness.set` takes `{"percent": 40}`.
-Both `.read` actions take no parameters. Booleans are not accepted as brightness numbers;
-brightness must be an integer from 0 to 100. Unknown arguments are rejected.
-
-Persist `request.to_dict()` if an application needs to retry or reconcile later. Parse it
-using `ControlRequest.from_dict` from `edge_delegate.contracts.control`. Never resolve a new
-name and assume it still denotes the original operation's device.
+The [SDK reference](reference/control-sdk.md) owns the complete example, method signatures,
+parameter types, lifecycle and exceptions. Import from `edge_delegate.application`; no lab
+imports or model weights are needed. Persist typed requests for identity-safe recovery.
 
 ## How execution connects
 

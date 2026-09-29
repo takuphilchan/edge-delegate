@@ -1,14 +1,14 @@
-# First production-roadmap batch: using the tooling
+# Review and candidate tooling
 
 [Roadmap](roadmap.md) | [Evidence](qualification-status.md)
 
+This is a task guide, not a second roadmap. Its filename is retained for compatibility.
 These foundations do not make the current model or gateway production-ready.
+Use the repository root and an activated environment from the [model tutorial](model-tutorial.md).
 
 ## Numeric challenge test
 
 ```bash
-cd /mnt/d/project/edge-delegate
-source /home/phil/.venvs/edge-model/bin/activate
 bash scripts/test-numeric.sh
 ```
 

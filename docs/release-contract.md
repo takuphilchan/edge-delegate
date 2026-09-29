@@ -13,7 +13,7 @@ not an extension of physical support or existing model qualification. See the
 [implemented control contract](device-control.md). The three-task behavior below remains the
 legacy model/artifact contract; it must not silently acquire new meanings.
 
-## Behavior
+## Legacy temperature/display behavior
 
 One configured sensor/display; English text; stateless requests. Return Celsius readings;
 display an explicit number; or read and display temperature. Clarify unbound references,
@@ -51,8 +51,10 @@ actions therefore remain a separate release gate. Runtime must fail closed on st
 uncertain operations, identity mismatch, overload and missing evidence.
 
 No TCP listener, cloud calls, speech pipeline, MCU inference, multi-tenant hosting, dynamic
-uninstalled tools or high-risk actuators in release one. Use readings/status only, never an
-operational safety interlock. Journals can contain sensitive arguments/receipts; protect storage
+uninstalled tools or high-risk actuators in release one. The legacy physical proposal covers
+readings/status only; the expanded control work currently uses software lights. Any physical
+control assembly needs separate approval and qualification. Never use this as an operational
+safety interlock. Journals can contain sensitive arguments/receipts; protect storage
 and backups even when ordinary raw-text logging is disabled.
 
 Release review must exercise malicious inputs, artifact loading, dependency provenance, socket/
