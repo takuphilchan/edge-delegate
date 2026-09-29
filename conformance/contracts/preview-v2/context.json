@@ -1,0 +1,47 @@
+{
+  "schema_version": "edge-preview-context.v1",
+  "authority_id": "example-desktop",
+  "policy": {
+    "version": "example-policy.v1",
+    "allowed_endpoints": [
+      "speakers-registered"
+    ],
+    "allowed_actions": [
+      "audio.volume.get",
+      "audio.volume.set"
+    ]
+  },
+  "endpoints": [
+    {
+      "binding": {
+        "authority_id": "example-desktop",
+        "endpoint_id": "speakers-registered",
+        "registration_generation": 1,
+        "observation_generation": 1,
+        "catalog_sha256": "663e169389868b2950d8d2f80547c70aaac401650000baaa0025f34464a623fb"
+      },
+      "actions": [
+        {
+          "action": "audio.volume.get",
+          "effect": "read",
+          "parameters": {},
+          "max_duration_ms": 1000,
+          "expected_evidence": "state_readback"
+        },
+        {
+          "action": "audio.volume.set",
+          "effect": "write",
+          "parameters": {
+            "percent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            }
+          },
+          "max_duration_ms": 1000,
+          "expected_evidence": "state_readback"
+        }
+      ]
+    }
+  ]
+}

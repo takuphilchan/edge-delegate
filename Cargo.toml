@@ -1,0 +1,33 @@
+[workspace]
+members = ["crates/edge-contracts", "crates/edge-core", "crates/edge-cli", "crates/edge-protocol", "crates/edge-storage", "adapters/simulator", "crates/edge-host", "crates/edge-client"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+edge-contracts = { path = "crates/edge-contracts" }
+edge-core = { path = "crates/edge-core" }
+edge-storage = { path = "crates/edge-storage" }
+edge-protocol = { path = "crates/edge-protocol" }
+edge-client = { path = "crates/edge-client" }
+nix = { version = "0.30", features = ["socket", "user", "process", "signal"] }
+subtle = "2.6"
+socket2 = "0.6"
+rusqlite = { version = "0.37", features = ["bundled"] }
+fs2 = "0.4"
+uuid = { version = "1.18", features = ["v4"] }
+tempfile = "3.23"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"

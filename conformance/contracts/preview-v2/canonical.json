@@ -1,0 +1,5 @@
+{
+  "algorithm": "edge-canonical-json.v1",
+  "canonical_utf8": "{\"authority_id\":\"example-desktop\",\"budget_ms\":2000,\"input\":{\"action\":\"audio.volume.set\",\"kind\":\"action\",\"parameters\":{\"percent\":{\"type\":\"integer\",\"value\":40}},\"target\":{\"authority_id\":\"example-desktop\",\"catalog_sha256\":\"663e169389868b2950d8d2f80547c70aaac401650000baaa0025f34464a623fb\",\"endpoint_id\":\"speakers-registered\",\"observation_generation\":1,\"registration_generation\":1}},\"request_id\":\"volume-example-1\",\"schema_version\":\"edge-control-request.v2\"}",
+  "sha256": "ea49e41e64f49e52eafd0b55babcd7a187cd8d86a03e8830e57f12d8415760d0"
+}

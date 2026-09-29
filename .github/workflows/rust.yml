@@ -1,0 +1,55 @@
+name: rust-foundation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned toolchain
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Tests and CLI fixtures
+        run: cargo test --workspace --locked
+      - name: Release build
+        run: cargo build --workspace --release --locked
+      - name: Software lost-acknowledgement recovery example
+        run: cargo run --locked -p edge-simulator --example recovery -- "${{ runner.temp }}/edge-recovery-evidence"
+      - name: Linux local service and CLI smoke test
+        if: runner.os == 'Linux'
+        run: bash scripts/test-rust-service.sh
+      - name: Linux supervised software execution
+        if: runner.os == 'Linux'
+        run: bash scripts/test-rust-supervision.sh
+      - name: Linux scoped authority and cancellation
+        if: runner.os == 'Linux'
+        run: bash scripts/test-rust-authority.sh
+      - name: Linux authenticated software execution IPC
+        if: runner.os == 'Linux'
+        run: bash scripts/test-rust-execution.sh
+
+  mobile-contracts:
+    # Compile portable libraries only. This is not a mobile app/device test.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned toolchain and targets
+        run: rustup toolchain install 1.90.0 --profile minimal --target aarch64-apple-ios --target aarch64-linux-android
+      - name: Check iOS libraries
+        run: cargo check -p edge-contracts -p edge-core --target aarch64-apple-ios --locked
+      - name: Check Android libraries
+        run: cargo check -p edge-contracts -p edge-core --target aarch64-linux-android --locked

@@ -30,3 +30,7 @@ artifacts/*
 .env.*
 !.env.example
 configs/local/
+
+# Cross-platform workspace build products; lockfiles remain tracked.
+/target/
+node_modules/

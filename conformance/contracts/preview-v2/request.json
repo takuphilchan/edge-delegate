@@ -1,0 +1,23 @@
+{
+  "schema_version": "edge-control-request.v2",
+  "request_id": "volume-example-1",
+  "authority_id": "example-desktop",
+  "budget_ms": 2000,
+  "input": {
+    "kind": "action",
+    "target": {
+      "authority_id": "example-desktop",
+      "endpoint_id": "speakers-registered",
+      "registration_generation": 1,
+      "observation_generation": 1,
+      "catalog_sha256": "663e169389868b2950d8d2f80547c70aaac401650000baaa0025f34464a623fb"
+    },
+    "action": "audio.volume.set",
+    "parameters": {
+      "percent": {
+        "type": "integer",
+        "value": 40
+      }
+    }
+  }
+}
