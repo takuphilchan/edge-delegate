@@ -192,7 +192,9 @@ impl SqliteJournal {
             return Err("journal_directory_symlink_forbidden".into());
         }
         if !directory.exists() {
-            let mut builder = fs::DirBuilder::new();
+            let builder = fs::DirBuilder::new();
+            #[cfg(unix)]
+            let mut builder = builder;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::DirBuilderExt;

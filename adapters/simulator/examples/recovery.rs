@@ -25,7 +25,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let root = PathBuf::from(&args[0]);
     // Fail if it exists: don't reuse user evidence or silently repeat this scenario.
-    let mut builder = std::fs::DirBuilder::new();
+    let builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    let mut builder = builder;
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
