@@ -146,24 +146,9 @@ impl AdmissionWriter {
         identifier(principal)?;
         identifier(id)?;
         self.budget(deadline)?;
-        let text: Option<String> = self
-            .connection
-            .query_row(
-                "SELECT record FROM operations WHERE principal=?1 AND request_id=?2",
-                params![principal, id],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(err)?;
-        let operation = text
-            .map(|text| {
-                let record = decode(&text, &self.authority)?;
-                verify_indexes(&self.connection, &record)?;
-                Ok(record)
-            })
-            .transpose();
+        let operation = lookup_operation(&self.connection, principal, id, &self.authority)?;
         check_deadline(deadline)?;
-        operation
+        Ok(operation)
     }
     fn budget(&self, deadline: Instant) -> Result<()> {
         check_deadline(deadline)?;

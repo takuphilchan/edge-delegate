@@ -182,6 +182,55 @@ fn verify_indexes(conn: &Connection, record: &Operation) -> Result<()> {
     Ok(())
 }
 
+/// Read the serialized record and its indexed columns in one SQLite snapshot.
+/// A second query can observe a later commit and falsely report corruption.
+fn lookup_operation(
+    conn: &Connection,
+    principal: &str,
+    request_id: &str,
+    authority: &str,
+) -> Result<Option<Operation>> {
+    struct Row {
+        record: String,
+        operation_id: String,
+        principal: String,
+        request_id: String,
+        endpoint: String,
+        state: String,
+    }
+    let row = conn
+        .query_row(
+            "SELECT record,operation_id,principal,request_id,endpoint,state FROM operations
+             WHERE principal=?1 AND request_id=?2",
+            params![principal, request_id],
+            |r| {
+                Ok(Row {
+                    record: r.get(0)?,
+                    operation_id: r.get(1)?,
+                    principal: r.get(2)?,
+                    request_id: r.get(3)?,
+                    endpoint: r.get(4)?,
+                    state: r.get(5)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(err)?;
+    row.map(|row| {
+        let record = decode(&row.record, authority)?;
+        if record.operation_id != row.operation_id
+            || record.principal != row.principal
+            || record.request_id != row.request_id
+            || record.plan.steps[0].target.endpoint_id != row.endpoint
+            || state_name(record.state) != row.state
+        {
+            return Err("corrupt_operation_index".into());
+        }
+        Ok(record)
+    })
+    .transpose()
+}
+
 impl SqliteJournal {
     pub fn open(directory: &Path, authority: &str) -> Result<Self> {
         identifier(authority)?;
@@ -423,22 +472,9 @@ impl Journal for SqliteJournal {
         identifier(principal)?;
         identifier(request_id)?;
         self.budget(deadline)?;
-        let text: Option<String> = self
-            .connection
-            .query_row(
-                "SELECT record FROM operations WHERE principal=?1 AND request_id=?2",
-                params![principal, request_id],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(err)?;
+        let operation = lookup_operation(&self.connection, principal, request_id, &self.authority)?;
         check_deadline(deadline)?;
-        text.map(|text| {
-            let record = decode(&text, &self.authority)?;
-            verify_indexes(&self.connection, &record)?;
-            Ok(record)
-        })
-        .transpose()
+        Ok(operation)
     }
 
     fn claim(
