@@ -19,10 +19,16 @@ fn run(args: &[String]) -> Result<(), String> {
         println!(
             "edgectl: experimental local control clients\nUsage: edgectl preview --request FILE --context FILE\n       edgectl capabilities --directory PRIVATE_DIRECTORY\n       edgectl preview --request FILE --directory PRIVATE_DIRECTORY\n       edgectl service --directory PRIVATE_DIRECTORY --credential FILE --command FILE [--save-credential NEW_FILE]\nPreview commands: No model, live authorization, approval or device execution.\nThe separate service command can submit authenticated SOFTWARE operations. Owner approval and client submission are separate calls; no automatic approval."
         );
+        println!(
+            "V2 notes: edgectl workspace-service --directory PRIVATE_V2_DIRECTORY --credential FILE --command FILE [--save-credential NEW_FILE]\nSeparate v2 credentials and owner confirmation are required for writes."
+        );
         return Ok(());
     }
     if args.first().is_some_and(|s| s == "service") {
         return execution_service(&args[1..]);
+    }
+    if args.first().is_some_and(|s| s == "workspace-service") {
+        return workspace_service(&args[1..]);
     }
     if args.len() == 3 && args[0] == "capabilities" && args[1] == "--directory" {
         return local(&args[2], None);
@@ -121,4 +127,45 @@ fn execution_service(args: &[String]) -> Result<(), String> {
 #[cfg(not(target_os = "linux"))]
 fn execution_service(_: &[String]) -> Result<(), String> {
     Err("execution service client currently requires Linux/WSL".into())
+}
+
+#[cfg(target_os = "linux")]
+fn workspace_service(args: &[String]) -> Result<(), String> {
+    use edge_client::actions::{Command, GatewayClient, Reply, save_credential};
+    use std::path::Path;
+    if !matches!(args.len(), 6 | 8)
+        || args[0] != "--directory"
+        || args[2] != "--credential"
+        || args[4] != "--command"
+        || (args.len() == 8 && args[6] != "--save-credential")
+    {
+        return Err("expected: workspace-service --directory DIR --credential FILE --command FILE [--save-credential NEW_FILE]".into());
+    }
+    let command: Command = edge_contracts::parse_json(&read_frame(&args[5])?)?;
+    if matches!(command, Command::Enroll { .. }) != (args.len() == 8) {
+        return Err("only enrollment requires --save-credential NEW_FILE".into());
+    }
+    if args.len() == 8 && Path::new(&args[7]).symlink_metadata().is_ok() {
+        return Err("credential output exists; refusing overwrite".into());
+    }
+    let client = GatewayClient::connect(Path::new(&args[1]), Path::new(&args[3]))
+        .map_err(|e| e.to_string())?;
+    match client.call(command).map_err(|e| e.to_string())? {
+        Reply::Enrolled { credential } => {
+            save_credential(Path::new(&args[7]), &credential).map_err(|e| e.to_string())?;
+            println!(
+                "{}",
+                serde_json::json!({"enrollment_saved":true,"principal":credential.principal})
+            );
+        }
+        reply => println!(
+            "{}",
+            serde_json::to_string_pretty(&reply).map_err(|e| e.to_string())?
+        ),
+    }
+    Ok(())
+}
+#[cfg(not(target_os = "linux"))]
+fn workspace_service(_: &[String]) -> Result<(), String> {
+    Err("v2 workspace service currently requires Linux/WSL".into())
 }

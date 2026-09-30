@@ -1,6 +1,8 @@
 //! Strict framing, preview-service messages and Linux same-user transport checks.
+pub mod action_adapter;
 pub mod adapter;
 pub mod execution;
+pub mod execution_v2;
 #[cfg(target_os = "linux")]
 pub mod local;
 pub mod service;

@@ -1,6 +1,12 @@
 //! Experimental Linux host: separate preview and authenticated software-execution services,
 //! trusted-owner console and scoped authority. No native device control.
 #[cfg(target_os = "linux")]
+pub mod action_process;
+#[cfg(target_os = "linux")]
+pub mod action_service;
+#[cfg(target_os = "linux")]
+pub mod actions;
+#[cfg(target_os = "linux")]
 pub mod authority;
 #[cfg(target_os = "linux")]
 pub mod console;

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/edge-contracts", "crates/edge-core", "crates/edge-cli", "crates/edge-protocol", "crates/edge-storage", "adapters/simulator", "crates/edge-host", "crates/edge-client"]
+members = ["crates/edge-contracts", "crates/edge-core", "crates/edge-cli", "crates/edge-protocol", "crates/edge-storage", "adapters/simulator", "adapters/workspace", "crates/edge-host", "crates/edge-client"]
 resolver = "2"
 
 [workspace.package]

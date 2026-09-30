@@ -3,6 +3,42 @@ use std::process::ExitCode;
 #[cfg(target_os = "linux")]
 fn run(args: &[String]) -> Result<(), String> {
     use std::{fs::File, io::Read, path::Path, sync::atomic::AtomicBool};
+    if args.len() == 3 && args[0] == "serve-workspace" && args[1] == "--directory" {
+        let worker = std::env::current_exe()
+            .map_err(|e| e.to_string())?
+            .parent()
+            .ok_or("missing_install_directory")?
+            .join("edge-delegate-workspace-worker");
+        let server = edge_host::action_service::ActionServer::bind(
+            Path::new(&args[2]),
+            |directory, authority| {
+                let adapter = edge_host::action_process::ProcessAdapter::spawn(
+                    &worker,
+                    vec![
+                        "--directory".into(),
+                        directory
+                            .join("notes")
+                            .to_str()
+                            .ok_or("invalid_path")?
+                            .into(),
+                        "--authority".into(),
+                        authority.into(),
+                        "--endpoint".into(),
+                        "notes".into(),
+                    ],
+                )?;
+                Ok(vec![Box::new(adapter)])
+            },
+        )
+        .map_err(|e| e.to_string())?;
+        println!(
+            "READY: authenticated v2 workspace service. Real app-owned notes; no native device controls.\nOwner credential: {}/owner-v2.json\nKeep credentials private. Restart never resumes unfinished actions.",
+            args[2]
+        );
+        return server
+            .serve_until(&AtomicBool::new(false))
+            .map_err(|e| e.to_string());
+    }
     if args.len() == 3 && args[0] == "serve-software" && args[1] == "--directory" {
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
         let worker = executable
@@ -61,6 +97,9 @@ fn main() -> ExitCode {
     if args.is_empty() || args == ["--help"] {
         println!(
             "edge-delegate-host: experimental Linux host foundations\nUsage: edge-delegate-host serve-preview --directory PRIVATE_DIRECTORY --context FILE\n       edge-delegate-host software-session --directory NEW_SOFTWARE_DIRECTORY\n       edge-delegate-host serve-software --directory PRIVATE_SERVICE_DIRECTORY\nserve-preview remains non-executing. serve-software admits authenticated software execution after separate owner confirmation. No native device control. Keep service, preview, software-session and legacy journal directories separate."
+        );
+        println!(
+            "V2 notes: edge-delegate-host serve-workspace --directory PRIVATE_V2_DIRECTORY\nUses a separate authenticated service and installed notes worker. Creates real app-owned notes; no native device controls."
         );
         return ExitCode::SUCCESS;
     }

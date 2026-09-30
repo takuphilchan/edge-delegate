@@ -1,0 +1,52 @@
+[
+  {
+    "request": {
+      "action": "notes.create",
+      "budget_ms": 2000,
+      "parameters": {
+        "body": {
+          "type": "string",
+          "value": "Hello café"
+        },
+        "title": {
+          "type": "string",
+          "value": "Session"
+        }
+      },
+      "request_id": "note-request-1",
+      "schema_version": "edge-action-request.v1",
+      "target": {
+        "authority_id": "host",
+        "catalog_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "endpoint_id": "notes",
+        "observation_generation": 0,
+        "registration_generation": 1
+      }
+    },
+    "canonical_utf8": "{\"action\":\"notes.create\",\"budget_ms\":2000,\"parameters\":{\"body\":{\"type\":\"string\",\"value\":\"Hello café\"},\"title\":{\"type\":\"string\",\"value\":\"Session\"}},\"request_id\":\"note-request-1\",\"schema_version\":\"edge-action-request.v1\",\"target\":{\"authority_id\":\"host\",\"catalog_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint_id\":\"notes\",\"observation_generation\":0,\"registration_generation\":1}}",
+    "sha256": "6daec7dddccf170858a1d6f5e4c342ca7d4742434530cde682afc964f445e817"
+  },
+  {
+    "request": {
+      "action": "audio.volume.set",
+      "budget_ms": 2000,
+      "parameters": {
+        "percent": {
+          "type": "integer",
+          "value": 40
+        }
+      },
+      "request_id": "audio-request-1",
+      "schema_version": "edge-action-request.v1",
+      "target": {
+        "authority_id": "host",
+        "catalog_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "endpoint_id": "output",
+        "observation_generation": 0,
+        "registration_generation": 1
+      }
+    },
+    "canonical_utf8": "{\"action\":\"audio.volume.set\",\"budget_ms\":2000,\"parameters\":{\"percent\":{\"type\":\"integer\",\"value\":40}},\"request_id\":\"audio-request-1\",\"schema_version\":\"edge-action-request.v1\",\"target\":{\"authority_id\":\"host\",\"catalog_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"endpoint_id\":\"output\",\"observation_generation\":0,\"registration_generation\":1}}",
+    "sha256": "b2f99660554c1261cc620e921dbda867d2c57c29548d1f1653832fb9d402673a"
+  }
+]

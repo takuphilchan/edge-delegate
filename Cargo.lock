@@ -170,6 +170,24 @@ dependencies = [
  "edge-contracts",
  "edge-core",
  "fs2",
+ "nix",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "edge-workspace"
+version = "0.1.0"
+dependencies = [
+ "edge-client",
+ "edge-contracts",
+ "edge-core",
+ "edge-host",
+ "edge-protocol",
+ "fs2",
+ "nix",
  "rusqlite",
  "serde_json",
  "tempfile",

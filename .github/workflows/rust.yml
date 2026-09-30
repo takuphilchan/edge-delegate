@@ -41,6 +41,12 @@ jobs:
       - name: Linux authenticated software execution IPC
         if: runner.os == 'Linux'
         run: bash scripts/test-rust-execution.sh
+      - name: Linux notes adapter and explicit-input example
+        if: runner.os == 'Linux'
+        run: bash scripts/test-workspace.sh
+      - name: Linux authenticated generic notes service and client
+        if: runner.os == 'Linux'
+        run: bash scripts/test-workspace-service.sh
 
   mobile-contracts:
     # Compile portable libraries only. This is not a mobile app/device test.

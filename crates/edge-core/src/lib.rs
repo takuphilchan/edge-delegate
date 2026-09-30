@@ -1,6 +1,7 @@
 //! Portable compiler and single-operation coordinator. Concrete I/O is supplied by ports.
 //! Saved-context previews are for inspection; they cannot authorize live execution.
 
+pub mod actions;
 pub mod cancellation;
 pub mod execution;
 

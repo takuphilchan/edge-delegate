@@ -19,7 +19,7 @@ pub enum ParameterRule {
 }
 
 impl ParameterRule {
-    fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
         match self {
             Self::Integer { minimum, maximum }
                 if minimum > maximum

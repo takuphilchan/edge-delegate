@@ -103,7 +103,7 @@ impl Registry {
         }
     }
 }
-fn save(directory: &Path, name: &str, value: &impl Serialize) -> io::Result<()> {
+pub(crate) fn save(directory: &Path, name: &str, value: &impl Serialize) -> io::Result<()> {
     let target = directory.join(name);
     if target.symlink_metadata().is_ok() {
         let meta = edge_protocol::local::private_metadata(&target)?;

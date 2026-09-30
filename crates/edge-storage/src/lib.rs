@@ -1,6 +1,8 @@
 //! Experimental SQLite journal for trusted local embedding. No authentication service.
 //! One owner per journal directory. Not a global cross-journal/device ownership lock.
 
+#[cfg(target_os = "linux")]
+pub mod actions;
 pub mod admission;
 use edge_contracts::{MAX_FRAME_BYTES, Result, digest, fingerprint, identifier, parse_json};
 use edge_core::{

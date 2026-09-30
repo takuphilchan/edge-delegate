@@ -19,6 +19,7 @@ def test_rust_dependency_direction():
         "edge-protocol": {"edge-contracts"},
         "edge-storage": {"edge-contracts", "edge-core"},
         "edge-simulator": {"edge-contracts", "edge-core", "edge-protocol"},
+        "edge-workspace": {"edge-contracts", "edge-core", "edge-protocol"},
         "edge-host": {"edge-contracts", "edge-core", "edge-protocol", "edge-storage"},
         "edge-client": {"edge-contracts", "edge-protocol"},
     }
@@ -58,6 +59,19 @@ def test_existing_python_entrypoints_are_preserved():
         "edge-delegate-lab": "edge_delegate_lab.cli:main",
         "edge-delegate-device": "edge_delegate.simulator.server:main",
     }
+
+
+def test_generic_action_vectors_match_python_canonical_hashing():
+    vectors = json.loads(
+        (ROOT / "conformance/execution-v2/action-vectors.json").read_text(encoding="utf-8")
+    )
+    assert {row["request"]["action"] for row in vectors} == {"notes.create", "audio.volume.set"}
+    for row in vectors:
+        canonical = json.dumps(
+            row["request"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        assert canonical == row["canonical_utf8"]
+        assert hashlib.sha256(canonical.encode()).hexdigest() == row["sha256"]
 
 
 def test_v2_schema_accepts_fixture_and_rejects_legacy_and_extra_fields():

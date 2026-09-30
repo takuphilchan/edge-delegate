@@ -1,6 +1,7 @@
 //! Data-only cross-platform contracts. Parsing is bounded and rejects duplicate keys.
 //! A validated request or preview is never an authorization to dispatch.
 
+pub mod actions;
 pub mod admission;
 pub mod operation;
 pub mod preview;
