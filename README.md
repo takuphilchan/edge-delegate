@@ -10,8 +10,10 @@ For example, an application requests **“set this output to 40%.”** The user 
 target and value before approving. If the connection drops after execution, the application
 can look up that same operation instead of sending a new request and risking a duplicate.
 
-**Developer preview:** today the Rust service runs on Linux/WSL with a simulated volume
-device. It does not change native audio or control your phone. Real-device adapters and a
+**Developer preview:** today the Rust services run on Linux/WSL. The original service controls
+a simulated volume device; the new [v2 service](docs/reference/execution-service.md#v2-notes-service)
+creates and retrieves real app-owned notes with approval and durable results. Neither changes
+native audio or controls your phone. Real-device adapters and a
 companion app are part of the [roadmap](docs/roadmap.md).
 
 [Get started](docs/getting-started.md) · [How it works](docs/architecture.md) ·

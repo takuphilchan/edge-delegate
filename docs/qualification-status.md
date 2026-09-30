@@ -3,7 +3,7 @@
 [Documentation](README.md) · [Roadmap](roadmap.md) · [Release requirements](release-contract.md)
 
 **Edge Delegate is experimental developer software. No production configuration is qualified.**
-The usable Rust path is a Linux/WSL execution service backed by a software device.
+The usable Rust paths are Linux/WSL services for a software device and real app-owned notes.
 Build coverage on other platforms is not native-device support.
 
 ## What you can use
@@ -14,6 +14,8 @@ Build coverage on other platforms is not native-device support.
 | Rust operation storage | Persistent admission and receipts, duplicate protection, restart recovery, schema-1 to schema-2 upgrade | No safe stale-backup restore, production archival or cross-journal device ownership |
 | Python device runtime | Software lights, temperature/display examples, existing adapter extensions | Separate API and journal, not a client of the Rust service |
 | Python model lab | Data review, training and outcome evaluation | Existing learned candidates have unresolved quality failures |
+| Generic Rust v2 service | Filtered discovery, enrollment, exact owner approval, execution, status, cancellation, reconciliation and activity events through the public Rust client | Linux/WSL only; no Windows transport, Python client or installed release package |
+| Rust notes adapter | Immutable create/read/list, principal ownership, atomic creation/receipt and duplicate checks, now in a supervised worker | Real app-owned storage, not a physical-device test; no Windows ACL implementation |
 
 For a working path, use the [quickstart](getting-started.md). For exact methods and limits,
 use the [service reference](reference/execution-service.md).
@@ -61,9 +63,62 @@ does not establish correct model interpretation or independent physical observat
 
 ## Next work
 
-The next service work is durable events, graceful lifecycle and clean-install/recovery tests,
-followed by storage hardening and additional public clients. Follow the
+The next service work is secure Windows transport/storage, Python client parity and clean-install
+packaging. Native controls and the UI
+follow that integration, not direct exposure of the trusted adapter. Follow the
 [active delivery sequence](roadmap.md#immediate-next-batch), not old implementation-batch lists.
+
+Contributors can exercise the notes adapter in Linux/WSL with
+`cargo run --locked -p edge-workspace --example notes -- NEW_PRIVATE_DIRECTORY`.
+The parent directory must exist; use a dedicated directory, not an existing service journal.
+It prints a plan and requires `create` before storing a note, then reads the note back.
+This is a direct trusted-owner adapter example, **not authenticated SDK/service approval**.
+Each run creates a new request; preserve storage and the printed operation ID after an error.
+`cargo test --locked -p edge-workspace` checks receipt recovery and non-actions without hardware.
+`bash scripts/test-workspace.sh` also checks the example's decline and creation paths automatically.
+
+The generic authority is also executable as a contributor example:
+`cargo run --locked -p edge-workspace --example notes_authority -- NEW_PRIVATE_DIRECTORY`.
+It previews a note, requires the owner's `create` confirmation, executes with a scoped
+client handle, reads the note and prints its durable activity history. The script above
+tests its approval and decline paths too. This is trusted in-process embedding, not IPC
+authentication or the future public SDK onboarding experience.
+
+This authority supports at most nine concurrent executions (one adapter owner, eight waiting),
+128 live offers, 64 principals, 10,000 retained request identities and 100,000 metadata events.
+Offers expire after 60 seconds; consent never extends that preview lifetime. Permissions are
+rechecked at dispatch under the same gate as revocation. Revoked handles may inspect their
+own historical records but cannot start new actions. Restart expires offers, cancels queued
+work and preserves dispatched uncertainty; it never resumes execution automatically.
+Unknown mutations fence subsequent writes to the endpoint until reconciled.
+
+These count limits are not a production disk quota or retention policy. Direct embedding
+still relies on trusted adapters honoring deadlines. The v2 host uses a supervised notes worker:
+transport expiry or corruption retires the worker; reconciliation can restart it and query
+receipts without invoking the uncertain action again. Terminating a process does not prove
+that an action had no effect. This is supervision, not a security sandbox.
+Coordinated backups and reserved recovery capacity remain open.
+
+Foundation verification on 30 September 2026: **141 Rust tests passed** (including process-exit
+helpers), **604 Python tests passed, one hardware test deselected**, and Clippy, Ruff and
+formatting passed. The existing execution-service/tutorial checks and the notes example
+checks passed. These are Linux/WSL software results, not a v2 service or native Windows claim.
+
+Subsequent authority verification on 30 September 2026: **152 Rust tests passed**,
+**604 Python tests passed, one hardware test deselected**. Clippy, Ruff, formatting,
+the existing authenticated execution-service diagnostics and both notes examples passed.
+The added coverage includes transactional event failure, immutable request identity,
+restart fencing, policy changes, lost acknowledgements, concurrent duplicates, queued
+cancellation/expiry/revocation, overload and adapter reconciliation panic. These results
+did not establish native-adapter or v2-service behavior; that batch preceded service integration.
+
+Authenticated v2 integration verification on 30 September 2026: **161 Rust tests passed**,
+**604 Python tests passed, one hardware test deselected**. Clippy, Ruff, formatting, the new
+`scripts/test-workspace-service.sh` diagnostic and the legacy execution-service/tutorial
+diagnostics passed. The v2 tests exercise real notes through the public client and worker,
+separate owner confirmation, ownership checks, durable revocation, dropped responses,
+restart, worker hangs/crashes, malformed replies and lost acknowledgements. This is Linux/WSL
+development evidence, not native Windows coverage, performance qualification or a production release.
 
 ## Earlier evidence
 

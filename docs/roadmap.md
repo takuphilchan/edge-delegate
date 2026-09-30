@@ -7,6 +7,13 @@ Python model lab, and a shared desktop/mobile assistant. SDK and application are
 products. Windows, native Linux, macOS, Android and iOS are in scope, with different
 capabilities. Internet control uses an optional self-hosted relay; interpretation stays local.
 
+The approved near-term slice (30 September 2026) is a practical desktop SDK: develop
+Windows and Linux together, deliver public clients before the small desktop app, and support
+notes, explicitly selected audio outputs and owner-registered application launch. Combine
+those into a configured Prepare workspace workflow. Remembered grants are opt-in, narrow,
+expiring and revocable. Phone control, relay and model interpretation follow this local slice.
+Linux native controls remain unqualified until a native desktop test environment is available.
+
 The existing Python implementation remains available. **Rust currently provides contracts,
 offline preview, bounded framing, a single-operation coordinator, a SQLite journal with
 trusted-operator approvals, and a fault-injecting software adapter. A Linux authenticated
@@ -27,7 +34,7 @@ A working Rust build is not a production or mobile qualification.
 | 2 | Versioned contracts, framing and Rust/Python/TypeScript client parity | All clients pass shared fixtures, negotiation and fake-host tests | Separate preview/execution envelopes and Linux Rust clients implemented; Python/TypeScript clients and other native transports pending |
 | 3 | Compiler, approvals, journal, simulator, recovery | Duplicate, drift, authorization, lost-ack and restart tests pass | Single-operation recovery plus Rust schema-1 to schema-2 backup/migration added; legacy import and stale-restore fencing pending |
 | 4 | Supervised host, bounded queue, workers, deadlines and cancellation | Zero invocation after pre-dispatch expiry/cancellation; uncertainty retained | Linux software execution RPC, persistent scoped enrollment, owner approval and durable recovery implemented; event stream, native supervisors and planner isolation pending |
-| 5 | Native status/notes/audio/registered-app integrations | Each advertised capability has native effect and permission tests | Pending |
+| 5 | Native status/notes/audio/registered-app integrations | Each advertised capability has native effect and permission tests | Linux app-owned notes work through authenticated v2 IPC and a supervised worker; native OS controls pending |
 | 6 | Assistant onboarding, controls, preview, approvals, activity and recovery | New user completes a local action and fault recovery without a terminal | Pending |
 | 7 | Pairing, grants, direct connections and encrypted relay | Revocation, wrong-peer, suspension and reconnect tests pass without replay | Pending |
 | 8 | Bounded named workflows | Partial effects, handoff, failures and restart remain truthful | Pending |
@@ -43,16 +50,25 @@ semantics. Remote control requires the supervised authority and explicit grants.
 
 ## Immediate next batch
 
-1. Add durable events, graceful lifecycle and clean-install/recovery tests around the new
-   execution service. Enrollment, revocation and accepted requests persist; previews,
-   approvals and live scheduling do not resume on restart. Keep the original preview
-   socket non-executing. Add planner restrictions separately; filesystem commits remain
-   non-preemptible.
-2. Enforce device ownership across journals, then implement legacy import/stale-restore
-   fencing and byte quota handling. Rust schema upgrades retain a pre-upgrade snapshot;
-   that does not yet establish a safe stale-backup restore or downgrade procedure.
-3. Add Python/TypeScript clients against the versioned execution service and cross-language fixtures.
-4. Introduce the frontend only with executable startup and public-client tests.
+The generic action contracts/compiler, Linux notes adapter and in-process generic authority
+are implemented as foundations. The authority routes installed adapters through exact
+principal/action/endpoint policy, owner approval, durable admission and cancellation.
+Its dedicated journal commits policy revisions and activity events with state transitions.
+The separate authenticated v2 service now connects this authority to a public Rust client,
+CLI, and supervised notes worker. V1 credentials never acquire v2 permissions. Installed
+worker paths come from host configuration, not client requests. See the
+[v2 service walkthrough](reference/execution-service.md#v2-notes-service).
+
+1. Add secure Windows transport/storage, then Python client parity and clean-install examples.
+   Existing v1 credentials must never acquire permissions for new actions implicitly.
+2. Add native audio and registered-app adapters, remembered grants, the small desktop app,
+   and the configured workspace workflow, in that order. Native effect tests are opt-in.
+3. Finish quotas, coordinated backup/restore fencing, packaging and independent adoption tests.
+   No automatic legacy import or concurrent ownership of the same adapter state.
+
+The notes adapter uses its own dedicated database. Its transaction binds immutable note
+creation to a receipt; it does not replace the host journal or establish authenticated consent.
+The adapter example is a contributor diagnostic, not the new SDK onboarding path.
 
 The v2 preview is saved-context inspection. Its Linux transport authenticates the local owner,
 but the preview cannot certify current state, issue an approval, or authorize a side effect.

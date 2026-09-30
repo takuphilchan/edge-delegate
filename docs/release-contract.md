@@ -4,6 +4,13 @@
 
 Approved direction: 29 September 2026. This is the target product contract, not a support claim.
 
+Near-term delivery update, 30 September: Windows and Linux desktop SDK first, then the small
+desktop application. The first useful workflow creates a note, sets a selected output's
+volume and requests a registered application launch. Other platforms and remote connectivity
+remain the longer-term direction. The current Windows development machine is Windows 11 Pro
+x64 build 26200; that inventory is not native qualification. Linux native testing is gated on
+access to a suitable Ubuntu desktop; WSL software tests do not satisfy it.
+
 ## Product
 
 Two equal products: a developer SDK/local execution host and a desktop/mobile assistant.
@@ -28,6 +35,17 @@ Reads require granted scopes. Writes require preview and confirmation by default
 Remembered permissions bind a specific principal, action and target. Pairing alone grants
 no execution authority. Unsupported capabilities are not replaced by arbitrary screen clicks.
 Application launch may be only a handoff; state readback does not prove action causality.
+
+Notes are immutable and client-owned: create, read by opaque identifier and list summaries.
+Titles allow at most 256 UTF-8 bytes; bodies 4096; NUL is rejected. List pages contain at most
+20 summaries and never bodies. There is no arbitrary path, edit, delete or implicit sharing.
+Note creation and the adapter receipt must commit atomically. The host supplies authenticated
+principal context; resource ownership is not inferred from possession of a note ID.
+
+Planned remembered grants default to 24 hours, cap at seven days and 100 executions, and bind
+principal, action, exact target registration and parameter constraints. Reservations persist;
+restart never renews a grant. Revocation, catalog changes, expiry and clock rollback fence
+automatic authorization. Remembered grants are not implemented by the notes adapter.
 
 ## Support matrix
 
@@ -91,7 +109,10 @@ scoped handles, durable admission, bounded queueing, cancellation and owner-only
 Its new authenticated Linux execution service adds persistent scoped enrollment/revocation
 and an owner-only confirmation command. Previews, approvals and live scheduling do not
 resume on restart. Rust schema-1 journals receive a consistent backup and transactional
-schema-2 upgrade. Consumer consent UI, durable events,
+schema-2 upgrade. The separate generic in-process authority now records policy revisions and
+activity events transactionally and routes real notes and test adapters through scoped handles.
+Its separate authenticated v2 listener and public Rust client now use a supervised notes worker.
+This Linux/WSL integration has no native control qualification. Consumer consent UI,
 planner isolation, migration/restore,
 other native transports, native adapters, frontend, Python/TypeScript clients and relay remain
 pending. This is not a production permission service or a per-application identity system.

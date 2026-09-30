@@ -6,6 +6,11 @@ Start a local service, inspect a request, and decide whether to execute it. This
 uses a small Rust application that sets a simulated output to 40 percent. It does not change
 your computer's audio and needs no model or physical device.
 
+Want a real stored result rather than a software-device example? The separate
+[v2 notes walkthrough](reference/execution-service.md#v2-notes-service) creates and retrieves
+an app-owned note through an authenticated client. Use its own directory and credentials;
+the v1 steps below remain unchanged.
+
 The example is deliberately owner-run: you hold both the owner credential and a separately
 enrolled client credential. It demonstrates the API sequence, not a finished approval UI.
 

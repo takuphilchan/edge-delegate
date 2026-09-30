@@ -2,9 +2,10 @@
 
 [Documentation home](../README.md) · [Tutorial](../tutorials/rust-execution-service.md) · [Concepts](../concepts/execution.md)
 
-**Experimental. Linux/WSL. Software adapter only.** This page describes the implemented
-`edge-execution-service.v1` interface, not the planned cross-platform API. The only installed
-action is `audio.volume.set` on endpoint `output`. It does not change native audio.
+**Experimental. Linux/WSL.** There are two separate services. The v1 reference below controls
+only a software volume endpoint. The [v2 notes service](#v2-notes-service) creates and reads real
+app-owned notes through a generic client and supervised worker. Neither controls native audio
+or provides the planned cross-platform API. Their credentials, sockets and journals are separate.
 
 ## Connect and call
 
@@ -201,3 +202,106 @@ Graceful system-service shutdown, installation and soak qualification remain pen
 I/O and framing are bounded, but pathological filesystem calls cannot be hard-preempted.
 
 See [current evidence](../qualification-status.md) before making deployment claims.
+
+## V2 notes service
+
+Use this path to create and retrieve real notes without a model or physical device. It uses
+`edge-execution-service.v2`, `edge-action-credential.v2` credentials and a separate state
+directory. Never reuse the v1 software-service directory or credentials.
+
+For an automatic check from the repository root in Linux/WSL:
+
+```bash
+bash scripts/test-workspace-service.sh
+```
+
+The diagnostic creates private test notes, checks consent and same-ID retries, runs worker
+fault tests, and stops its host. It retains journals and credentials for inspection; do not
+upload that directory. Fixture approval is automated test evidence, not independent consent.
+
+For the interactive example, start **terminal A**:
+
+```bash
+cargo build --locked -p edge-host -p edge-workspace -p edge-cli --bins
+cargo build --locked -p edge-client --example workspace_client
+mkdir -p "$HOME/.local/state"
+cargo run --locked -p edge-host -- serve-workspace \
+  --directory "$HOME/.local/state/edge-delegate-workspace-v2"
+```
+
+Leave it running after `READY`. In **terminal B**, from the same repository:
+
+```bash
+cargo run --locked -p edge-client --example workspace_client -- \
+  "$HOME/.local/state/edge-delegate-workspace-v2" \
+  "$HOME/.local/state/edge-delegate-workspace-v2/owner-v2.json" \
+  workspace-note-1
+```
+
+Inspect the preview and type `create` to approve; Enter declines without creating a note.
+The example is an owner-run tutorial using separate owner and client connections. An actual
+application receives only its enrolled client credential, not the owner's credential.
+
+Successful output includes an opaque note ID, the readback and durable activity. Repeating
+the command with `workspace-note-1` returns the same completed note, not another creation.
+Use a new request ID only when intentionally requesting a new note. After timeout or an
+unknown outcome, inspect/reconcile the original request rather than rerunning with a new ID.
+A declined or expired identity cannot be revived into a new action.
+
+### V2 client and methods
+
+The public Rust entry point is `edge_client::actions::GatewayClient`. It imports no runtime
+or training code. `connect` reads a private credential file; `with_credential` accepts a
+supplied credential. Every call verifies host identity and re-authenticates. `close` prevents
+further calls. See the [complete client example](../../crates/edge-client/examples/workspace_client.rs).
+
+| Method | Access | Meaning |
+| --- | --- | --- |
+| `capabilities(after, limit)` | Client | Exact permitted action/endpoint pairs; at most 20 entries |
+| `preview(request)` | Client | Bind caller-generated request ID, target, typed arguments and budget; no dispatch |
+| `approve(principal, id, hash)` | Owner | Confirm one exact, current preview; a client cannot self-approve |
+| `execute(id, hash)` | Client | Execute or return existing progress; never auto-retry a mutation |
+| `status(id)` | Client | Inspect that client's durable record |
+| `events(after, limit)` | Client | Cursor-ordered metadata, at most 100 entries, no note bodies |
+| `cancel(id)` | Client | Fence undispatched work; dispatched work may remain uncertain |
+| `reconcile(id)` | Client | Query receipt evidence without invoking the action again |
+| `call(Enroll/Inspect/Revoke)` | Owner | Explicit permissions, inspection or durable revocation |
+
+`call(Command)` exposes the same versioned operations for CLI integrations. Use
+`edgectl workspace-service --directory DIR --credential FILE --command JSON_FILE`.
+Enrollment additionally requires `--save-credential NEW_FILE` and never prints a token.
+The old `edgectl service` remains v1. The parser requires the flag order shown.
+
+V2 enrollment command shape:
+
+```json
+{"method":"enroll","principal":"my-app","permissions":[{"endpoint":"notes","action":"notes.create"},{"endpoint":"notes","action":"notes.read"},{"endpoint":"notes","action":"notes.list"}]}
+```
+
+Permissions are exact pairs. They do not authorize unapproved writes. Reads need explicit
+action permission and enforce resource ownership; knowing another client's note ID is not
+permission to read it. Existing enrollment cannot silently broaden permissions or reactivate
+a revoked principal. V1 `control` scopes have no meaning here.
+
+### Worker and recovery boundary
+
+The host launches the installed `edge-delegate-workspace-worker` beside its executable.
+Only trusted host setup supplies its path and arguments. Client commands cannot select
+an executable or send raw worker messages. The worker receives no enrollment tokens.
+The private inherited socket carries bounded frames and sequence-bound responses.
+
+The host enforces observation/invocation transport deadlines and discards late responses.
+Timeout, disconnect or corrupt transport retires the child. Observation or explicit
+reconciliation may restart it; restart does not resend the uncertain invocation. On Linux,
+the worker also exits when its parent dies. This is process supervision, **not a sandbox**
+against trusted installed code or other programs running as the same OS user.
+
+`execute` currently waits for a result; callers may poll `status` from another connection.
+There are at most 16 connection handlers and nine concurrent executions (one adapter owner
+plus eight waiting). Saturation is rejected, not buffered indefinitely. Status/cancellation
+do not wait for a hung worker. Client wait timeouts are not cancellation acknowledgements.
+
+Unknown writes fence further writes to that endpoint until reconciliation. A terminated
+worker may already have committed a note. Conversely, absence of a receipt after a crash is
+not proof of no effect. Never delete journals or manufacture a successful receipt to clear
+this fence. No stale-backup recovery procedure or production release is claimed.

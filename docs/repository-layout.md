@@ -11,11 +11,13 @@ crates/edge-contracts/      Rust strict data-only v2 request types and canonical
 crates/edge-core/           Compiler and experimental single-operation coordinator/ports
 crates/edge-storage/        SQLite journal, bound approvals and restart transitions
 adapters/simulator/        Persistent software device, injected faults and recovery example
+adapters/workspace/        Linux immutable notes, atomic receipts and installed notes worker
 crates/edge-protocol/       Strict frames, separate preview/execution envelopes, Linux checks
 crates/edge-host/           Linux preview and authenticated software execution services
 crates/edge-client/         Public Rust preview and software execution clients
 crates/edge-cli/            edgectl preview commands plus explicit authenticated service calls
 conformance/contracts/     Shared request/context/hash fixtures
+conformance/execution-v2/  Generic action request/hash fixtures
 schemas/v2/                Experimental new schema; existing schemas stay in place
 tests/architecture/        Dependency, compatibility and documentation guards
 docs/decisions/            Target design, not implementation evidence
@@ -58,6 +60,18 @@ adapters implement ports. Host assembles the components. SDKs depend on contract
 not private core execution. UI calls public clients. Lab is not a runtime dependency.
 No model-family branches in core or shared commands. No generic utilities package to bypass
 these boundaries. Current Cargo edges are checked by the Python architecture suite.
+
+The additive `actions` modules in contracts/core define typed outputs and host-owned policy.
+`edge-host::actions` owns the generic scoped authority and registry; `edge-storage::actions`
+owns its separate journal and transactional activity events. Neither changes the v1 service
+or adopts its credentials. The workspace crate's test/example-only host dependency exercises
+that integration; note semantics depend on contracts/core ports, while the installed worker
+also uses the private protocol types.
+The workspace adapter implements that trusted embedding port; callers of it supply principal
+context and must already have authorization. It must not be exposed directly to untrusted
+clients. `execution_v2` defines the separate generic service contract. `edge-host::action_service`
+authenticates and routes it; `edge-client::actions` provides the public client.
+`edge-host::action_process` supervises the installed worker over a private inherited channel.
 
 Shared catalog/plan/preview wire types now live in edge-contracts; edge-core re-exports the
 previous names for Rust source compatibility. The client does not import the executor.
