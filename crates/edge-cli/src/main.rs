@@ -1,6 +1,48 @@
 //! Saved-context development preview, offline or through the Linux local host.
 use std::{fs::File, io::Read, process::ExitCode};
 
+fn command_help(command: &str) -> Option<&'static str> {
+    match command {
+        "preview" => Some(
+            "Preview a request against saved context; this does not authorize or execute actions.
+Usage: edgectl preview --request FILE --context FILE
+       edgectl preview --request FILE --directory PRIVATE_DIRECTORY
+Use the flag order shown. FILE inputs are JSON files.
+Offline preview (--context) works without a host. Local transport (--directory) requires Linux/WSL
+and a running saved-context preview service. Neither form checks live execution authorization.
+No model or device execution.
+Example: edgectl preview --request request.json --context context.json",
+        ),
+        "capabilities" => Some(
+            "Inspect the saved-context preview service; this does not authorize or execute actions.
+Usage: edgectl capabilities --directory PRIVATE_DIRECTORY
+Use the flag order shown. The local transport requires Linux/WSL and a running preview host.
+This is not v2 execution discovery; use workspace-service for authenticated v2 commands.
+Example: edgectl capabilities --directory /tmp/edge-preview",
+        ),
+        "service" => Some(
+            "Call the v1 simulated volume execution service (no native audio).
+Usage: edgectl service --directory PRIVATE_DIRECTORY --credential FILE --command FILE [--save-credential NEW_FILE]
+Use the flag order shown. Actual service calls require Linux/WSL and a running v1 host.
+--credential supplies the enrolled client or owner credential; --command takes a JSON file.
+--save-credential is required only for enrollment and must name a new file; tokens are not printed.
+Owner approval and client submission are separate calls for writes; no automatic approval.
+Example: edgectl service --directory /tmp/edge-v1 --credential client.json --command status.json",
+        ),
+        "workspace-service" => Some(
+            "Call the v2 real app-owned notes execution service (no native audio).
+Usage: edgectl workspace-service --directory PRIVATE_V2_DIRECTORY --credential FILE --command FILE [--save-credential NEW_FILE]
+Use the flag order shown. Actual service calls require Linux/WSL and a running v2 host.
+--credential supplies the enrolled client or owner credential; --command takes a JSON file.
+--save-credential is required only for enrollment and must name a new file; tokens are not printed.
+Owner approval and client submission are separate calls for writes; no automatic approval.
+V2 credentials and state directory are separate from v1; never reuse v1 credentials or state.
+Example: edgectl workspace-service --directory /tmp/edge-v2 --credential client-v2.json --command status.json",
+        ),
+        _ => None,
+    }
+}
+
 fn read_frame(path: &str) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     File::open(path)
@@ -22,6 +64,13 @@ fn run(args: &[String]) -> Result<(), String> {
         println!(
             "V2 notes: edgectl workspace-service --directory PRIVATE_V2_DIRECTORY --credential FILE --command FILE [--save-credential NEW_FILE]\nSeparate v2 credentials and owner confirmation are required for writes."
         );
+        return Ok(());
+    }
+    if let [command, flag] = args
+        && flag == "--help"
+        && let Some(help) = command_help(command)
+    {
+        println!("{help}");
         return Ok(());
     }
     if args.first().is_some_and(|s| s == "service") {

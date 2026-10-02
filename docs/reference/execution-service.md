@@ -7,6 +7,27 @@ only a software volume endpoint. The [v2 notes service](#v2-notes-service) creat
 app-owned notes through a generic client and supervised worker. Neither controls native audio
 or provides the planned cross-platform API. Their credentials, sockets and journals are separate.
 
+## Find command help
+
+From the repository root, inspect usage without starting a host or supplying credentials:
+
+```bash
+cargo run --locked -p edge-cli -- preview --help
+cargo run --locked -p edge-cli -- capabilities --help
+cargo run --locked -p edge-cli -- service --help
+cargo run --locked -p edge-cli -- workspace-service --help
+```
+
+With `edgectl` on your PATH, use `edgectl <command> --help` directly. Help works on all
+CLI build platforms; actual local service calls still require Linux/WSL. It prints usage
+and performs no service connection or action. The examples in help show the required flag
+order; service examples assume you have already created their JSON inputs and credentials.
+
+`preview` and `capabilities` inspect saved context and cannot authorize or execute actions.
+`service` calls the v1 simulated-volume service; `workspace-service` calls the v2 real-note
+service. They are not interchangeable: v2 uses separate credentials and state. Both execution
+services require separate owner approval and client submission for writes.
+
 ## Connect and call
 
 For a complete, runnable client, use the [approved-request example](../../crates/edge-client/examples/approved_request.rs)
