@@ -19,6 +19,8 @@ companion app are part of the [roadmap](docs/roadmap.md).
 [Get started](docs/getting-started.md) · [How it works](docs/architecture.md) ·
 [API reference](docs/reference/execution-service.md) · [Project status](docs/qualification-status.md)
 
+Contributing with an AI assistant? See the [OpenSpec development workflow](openspec/README.md).
+
 ## What you get
 
 - **Preview before execution.** See the exact target, action and parameters.

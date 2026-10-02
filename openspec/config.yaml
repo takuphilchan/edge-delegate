@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  Edge Delegate is a local permission-controlled execution SDK with a Rust host
+  and a preserved Python runtime/model lab. Keep training dependencies out of the
+  Rust runtime. Preserve protocols, artifacts, CLI, and journals unless an explicit
+  migration is approved. Never replay uncertain writes automatically.
+  Software tests and cross-compilation do not qualify native devices or production.
+  docs/roadmap.md owns priorities; docs/qualification-status.md owns measured
+  readiness. OpenSpec describes individual changes, not a second product roadmap.
+  Keep this project independent from OffGrid and the separate fine-tuning lab.
+
+rules:
+  proposal:
+    - Scope one independently reviewable change; state exclusions and user-visible acceptance criteria.
+    - Inspect existing code and tests first; distinguish current behavior from planned behavior.
+  specs:
+    - Use concrete WHEN/THEN scenarios, including relevant failure and compatibility cases.
+    - Never claim native effects, model quality, or independent approval without matching evidence.
+  design:
+    - Explain boundaries, compatibility, and recovery for affected stateful or security-sensitive paths.
+    - Reference existing architecture documents instead of copying or replacing them.
+  tasks:
+    - Include exact validation commands, expected outcomes, and affected documentation.
+    - Separate implementation from training, native side effects, deployment, and publication.
+    - Mark work complete only after checks actually run; record unavailable checks explicitly.
+
+operations:
+  apply:
+    guidance:
+      - Preserve unrelated work and approved scope; do not commit or push unless requested.
+      - Use the environment and verification guidance in AGENTS.md and openspec/README.md.
+  archive:
+    guidance:
+      - Require verification evidence and no unresolved blocking findings before archiving as completed.
+      - State unrun checks and limitations; archive status alone is not release qualification.
