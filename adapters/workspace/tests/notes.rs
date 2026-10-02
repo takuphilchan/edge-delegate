@@ -9,6 +9,100 @@ fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(2)
 }
 
+struct TestChild(std::process::Child);
+
+impl TestChild {
+    fn wait(&mut self) -> std::process::ExitStatus {
+        let until = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(status) = self.0.try_wait().unwrap() {
+                return status;
+            }
+            assert!(Instant::now() < until, "notes helper did not exit in time");
+            // Bound process waiting, not workspace acquisition: the child opens once.
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+}
+
+impl Drop for TestChild {
+    fn drop(&mut self) {
+        if !matches!(self.0.try_wait(), Ok(Some(_))) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+}
+
+#[test]
+fn ownership_child() {
+    let Some(path) = std::env::var_os("EDGE_NOTES_OWNERSHIP_TEST_DIR") else {
+        return;
+    };
+    let path = std::path::PathBuf::from(path);
+    let store = Workspace::open(&path, "host", "notes");
+    match std::env::var("EDGE_NOTES_OWNERSHIP_TEST_EXPECT")
+        .unwrap()
+        .as_str()
+    {
+        "blocked" => assert_eq!(store.err().unwrap(), "workspace_already_owned"),
+        "available" => drop(store.unwrap()),
+        _ => panic!("invalid ownership helper expectation"),
+    }
+}
+
+fn check_child_ownership(path: &std::path::Path, expected: &str) {
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "ownership_child", "--nocapture"])
+        .env("EDGE_NOTES_OWNERSHIP_TEST_DIR", path)
+        .env("EDGE_NOTES_OWNERSHIP_TEST_EXPECT", expected)
+        .stdin(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    assert!(TestChild(child).wait().success());
+}
+
+#[test]
+fn rejected_contenders_cannot_release_live_owner_across_processes() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("notes");
+    let mut store = Workspace::open(&path, "host", "notes").unwrap();
+    let req = create(&store, "original");
+    let original = digest(
+        &store
+            .invoke("alice", "original-op", &req, deadline())
+            .unwrap(),
+    )
+    .unwrap();
+    check_child_ownership(&path, "blocked");
+    assert_eq!(
+        Workspace::open(&path, "host", "notes").err().unwrap(),
+        "workspace_already_owned"
+    );
+    check_child_ownership(&path, "blocked");
+    assert_eq!(
+        digest(
+            &store
+                .reconcile("alice", "original-op", &req, deadline())
+                .unwrap()
+        )
+        .unwrap(),
+        original
+    );
+    drop(store);
+    check_child_ownership(&path, "available");
+    let mut reopened = Workspace::open(&path, "host", "notes").unwrap();
+    assert_eq!(
+        digest(
+            &reopened
+                .reconcile("alice", "original-op", &req, deadline())
+                .unwrap()
+        )
+        .unwrap(),
+        original
+    );
+}
+
 #[test]
 fn crash_child() {
     let Some(path) = std::env::var_os("EDGE_NOTES_CRASH_TEST_DIR") else {
@@ -328,8 +422,14 @@ fn competing_owner_and_replacement_deployment_are_rejected() {
     let store = Workspace::open(&path, "host", "notes").unwrap();
     assert!(Workspace::open(&path, "host", "notes").is_err());
     drop(store);
-    assert!(Workspace::open(&path, "other-host", "notes").is_err());
-    assert!(Workspace::open(&path, "host", "other-notes").is_err());
+    assert_eq!(
+        Workspace::open(&path, "other-host", "notes").err().unwrap(),
+        "workspace_deployment_mismatch"
+    );
+    assert_eq!(
+        Workspace::open(&path, "host", "other-notes").err().unwrap(),
+        "workspace_deployment_mismatch"
+    );
     assert!(Workspace::open(&path, "host", "notes").is_ok());
 }
 
@@ -351,12 +451,24 @@ fn locks_respect_deadline_and_corrupt_storage_is_not_reset() {
     db.execute_batch("ROLLBACK; PRAGMA user_version=999")
         .unwrap();
     drop(store);
-    assert!(Workspace::open(&path, "host", "notes").is_err());
+    assert_eq!(
+        Workspace::open(&path, "host", "notes").err().unwrap(),
+        "incompatible_workspace_storage"
+    );
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
         999
     );
+    // Inspect the OS lease directly: invalid storage must remain invalid, not
+    // be reset solely to demonstrate that initialization released ownership.
+    let lease = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path.join("workspace.lock"))
+        .unwrap();
+    fs2::FileExt::try_lock_exclusive(&lease).unwrap();
+    fs2::FileExt::unlock(&lease).unwrap();
 }
 
 #[test]
@@ -374,4 +486,19 @@ fn symlinks_and_broad_permissions_are_rejected() {
     )
     .unwrap();
     assert!(Workspace::open(&path, "host", "notes").is_err());
+    assert_eq!(
+        std::fs::metadata(path.join("notes.sqlite"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+    let lease = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path.join("workspace.lock"))
+        .unwrap();
+    fs2::FileExt::try_lock_exclusive(&lease).unwrap();
+    fs2::FileExt::unlock(&lease).unwrap();
 }

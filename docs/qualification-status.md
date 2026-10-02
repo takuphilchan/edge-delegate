@@ -120,6 +120,28 @@ separate owner confirmation, ownership checks, durable revocation, dropped respo
 restart, worker hangs/crashes, malformed replies and lost acknowledgements. This is Linux/WSL
 development evidence, not native Windows coverage, performance qualification or a production release.
 
+## Notes ownership regression - 2 October 2026
+
+A deterministic duplicate-handle test reproduced `workspace_already_owned` after
+normal owner teardown. The adapter now explicitly releases only its acquired lease
+in the acquiring process, after closing SQLite. It does not relax live ownership,
+change the storage schema, or replay an uncertain write.
+
+Focused Linux/WSL verification: **three private lease tests passed**, and the
+**12-test notes suite passed ten consecutive default-parallel runs**. Coverage
+includes actual competing processes, rejected-contender cleanup, initialization
+failure, original receipt preservation, permissions and incompatible storage,
+and process death before/after commit. An initial integration-test compilation
+error in receipt comparison was corrected before these runs. The duplicate-handle
+mechanism was reproduced; the exact process interleaving of the earlier flaky
+failure was not traced. These are regression checks, not native-device or
+production qualification.
+
+The full Rust workspace check is **not green**: the v2 service restart test
+`authenticated_notes_approval_ownership_events_and_restart` independently failed
+with `service_already_owned`. That service lease is separate from the repaired
+notes lease and remains a blocker; the focused results above do not resolve it.
+
 ## Earlier evidence
 
 Dated test counts, diagnostics, limitations and failed experiments are retained in

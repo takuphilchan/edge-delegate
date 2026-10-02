@@ -290,6 +290,15 @@ Only trusted host setup supplies its path and arguments. Client commands cannot 
 an executable or send raw worker messages. The worker receives no enrollment tokens.
 The private inherited socket carries bounded frames and sequence-bound responses.
 
+The notes workspace has one exclusive live owner. Normal teardown closes SQLite
+before explicitly releasing the ownership lease; failed initialization also releases
+an acquired lease without discarding the original error. Rejected contenders cannot
+release the current owner's lease. A still-running owner returns
+`workspace_already_owned`: allow that owner to finish or stop it normally, rather
+than deleting the lock file, notes database, or journals. Reopening preserves the
+original notes and receipts; it does not retry an uncertain operation. Inspect and
+reconcile its original request ID.
+
 The host enforces observation/invocation transport deadlines and discards late responses.
 Timeout, disconnect or corrupt transport retires the child. Observation or explicit
 reconciliation may restart it; restart does not resend the uncertain invocation. On Linux,

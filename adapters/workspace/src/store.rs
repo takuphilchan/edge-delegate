@@ -17,10 +17,42 @@ use uuid::Uuid;
 const APP_ID: i32 = 0x45444e31;
 const MAX_RECEIPTS: i64 = 10_000;
 pub struct Workspace {
+    // Fields drop in declaration order: close SQLite before releasing ownership.
     db: Connection,
-    _lease: File,
+    _lease: WorkspaceLease,
     endpoint: Endpoint,
 }
+
+// Keep an acquired lock until the actual owner has finished, not until every
+// incidental descriptor inherited by an unrelated child has been closed.
+struct WorkspaceLease {
+    file: File,
+    owner_process: u32,
+}
+
+impl WorkspaceLease {
+    fn acquire(path: &Path) -> Result<Self> {
+        let file = private_file(path)?;
+        file.try_lock_exclusive()
+            .map_err(|_| "workspace_already_owned")?;
+        Ok(Self {
+            file,
+            owner_process: std::process::id(),
+        })
+    }
+}
+
+impl Drop for WorkspaceLease {
+    fn drop(&mut self) {
+        // A forked copy must not unlock the still-live parent's authority.
+        // Workspace/SQLite objects themselves are not supported across fork.
+        if self.owner_process == std::process::id() {
+            let _ = FileExt::unlock(&self.file);
+        }
+        // Closing the owned file remains the non-panicking fallback on error.
+    }
+}
+
 fn error(e: impl ToString) -> String {
     e.to_string()
 }
@@ -74,10 +106,8 @@ impl Workspace {
         {
             return Err("unsafe_workspace_directory".into());
         }
-        let lease = private_file(&directory.join("workspace.lock"))?;
-        lease
-            .try_lock_exclusive()
-            .map_err(|_| "workspace_already_owned")?;
+        // Create before SQLite so error paths also close the database first.
+        let lease = WorkspaceLease::acquire(&directory.join("workspace.lock"))?;
         let path = directory.join("notes.sqlite");
         if !fresh && !path.exists() {
             return Err("workspace_storage_missing".into());
@@ -396,5 +426,67 @@ impl Adapter for Workspace {
         );
         check_deadline(deadline)?;
         Ok(receipt)
+    }
+}
+
+#[cfg(test)]
+mod lease_tests {
+    use super::*;
+
+    #[test]
+    fn owner_teardown_releases_lease_with_live_handle_alias() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("notes");
+        let store = Workspace::open(&path, "host", "notes").unwrap();
+        let alias = store._lease.file.try_clone().unwrap();
+        assert_eq!(
+            Workspace::open(&path, "host", "notes").err().unwrap(),
+            "workspace_already_owned"
+        );
+        drop(store);
+        let reopened = Workspace::open(&path, "host", "notes")
+            .expect("an incidental handle must not retain ownership after teardown");
+        assert_eq!(
+            Workspace::open(&path, "host", "notes").err().unwrap(),
+            "workspace_already_owned"
+        );
+        drop(alias);
+        drop(reopened);
+    }
+
+    #[test]
+    fn initialization_error_releases_acquired_lease_with_live_alias() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("workspace.lock");
+        let mut alias = None;
+        let result: Result<()> = (|| {
+            let lease = WorkspaceLease::acquire(&path)?;
+            alias = Some(lease.file.try_clone().unwrap());
+            // Exercise unwinding through an early Result error, without a
+            // production fault flag or altering the error returned to callers.
+            Err("injected_initialization_failure".into())
+        })();
+        assert_eq!(result.unwrap_err(), "injected_initialization_failure");
+        let reopened = WorkspaceLease::acquire(&path).unwrap();
+        assert!(WorkspaceLease::acquire(&path).is_err());
+        drop(alias);
+        drop(reopened);
+    }
+
+    #[test]
+    fn foreign_process_guard_does_not_release_original_owner() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("workspace.lock");
+        let lease = WorkspaceLease::acquire(&path).unwrap();
+        // Exercise the PID fence with a real descriptor alias, without unsafe
+        // fork in the multithreaded Rust test harness. Zero is not a userspace PID.
+        let inherited = WorkspaceLease {
+            file: lease.file.try_clone().unwrap(),
+            owner_process: 0,
+        };
+        drop(inherited);
+        assert!(WorkspaceLease::acquire(&path).is_err());
+        drop(lease);
+        assert!(WorkspaceLease::acquire(&path).is_ok());
     }
 }
